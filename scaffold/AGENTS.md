@@ -188,11 +188,9 @@ MYOPC_Team/
 │       └── active/                    ← 执行中 (*.json)
 │
 ├── .artifacts/                        ← 所有角色的产出物
-│   ├── {task_id}_{role}.md
-│   └── {project_id}/                  ← 多项目时按项目分目录
+│   └── {task_id}_{role}.md
 │
-├── workspace/                         ← 项目代码与注册表
-│   └── {project_id}/code/
+├── workspace/                         ← 项目工作区（注册表、临时文件等）
 │
 ├── staff/                             ← 角色身份定义
 │   └── {role}/{role}_identity.md
@@ -227,7 +225,7 @@ MYOPC_Team/
 
 ### 4.3 产出物命名
 
-所有角色产出写入 `.artifacts/`（按项目分目录时为 `.artifacts/{project}/`），命名规则: `{task_id}_{role}.md`
+所有角色产出写入 `.artifacts/`，命名规则: `{task_id}_{role}.md`
 
 ---
 
@@ -246,10 +244,6 @@ MYOPC_Team/
 
 `knowledge_base/` 放入技术文档、设计规范、公司调性等静态知识，角色 Agent 执行任务时可按需读取，避免每次重复描述上下文。
 
-### 5.4 多项目支持
-
-`workspace/` 未来可按 `{project_id}/` 分目录隔离不同项目的产出物和上下文，防止跨项目信息污染。
-
-### 5.5 协作链自动化
+### 5.4 协作链自动化
 
 当前 Brain 需要显式调用 dispatch + execute 串联多角色。未来可实现 **pipeline 模式**: 定义一条工作流（如 PM→Dev→Tester），Brain 只需触发起点，后续环节自动流转。

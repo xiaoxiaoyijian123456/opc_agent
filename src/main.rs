@@ -69,52 +69,31 @@ fn run_with_timeout(mut child: std::process::Child, timeout: Duration) -> (i32, 
 
 impl MYOPCApp {
     pub fn new() -> MYOPCApp {
-        let placeholder = PathBuf::from(".");
+        let config = myopc::config::load_config();
+        let root = team_root_path(&config);
+        let workspace = root.join("workspace");
+        std::fs::create_dir_all(&workspace).ok();
+
+        let bus = Bus::new(&root);
+        let identity = IdentityEngine::new(&root);
+        let skills = SkillLoader::new(&root.join("skills"));
+        let llm: Arc<dyn LlmBackend> = Arc::new(HttpLlm::new());
+        let runner = AgentRunner::new(
+            config.clone(),
+            bus.clone(),
+            identity.clone(),
+            workspace,
+            llm.clone(),
+        );
+        let brain = Brain::new(config.clone(), llm, Some(identity.clone()), tools::tool_defs());
+
         MYOPCApp {
-            config: Config {
-                provider: "openai".into(),
-                api_key: String::new(),
-                base_url: String::new(),
-                default_model: "gpt-4o".into(),
-                team_root: ".".into(),
-                code_root: None,
-                max_tokens: 8192,
-                temperature: 0.7,
-            },
-            bus: Bus::new(&placeholder),
-            identity: IdentityEngine::new(&placeholder),
-            skills: SkillLoader::new(&placeholder.join("skills")),
-            runner: Arc::new(Mutex::new(AgentRunner::new(
-                Config {
-                    provider: "openai".into(),
-                    api_key: String::new(),
-                    base_url: String::new(),
-                    default_model: "gpt-4o".into(),
-                    team_root: ".".into(),
-                    code_root: None,
-                    max_tokens: 8192,
-                    temperature: 0.7,
-                },
-                Bus::new(&placeholder),
-                IdentityEngine::new(&placeholder),
-                placeholder.clone(),
-                Arc::new(HttpLlm::new()),
-            ))),
-            brain: Arc::new(Mutex::new(Brain::new(
-                Config {
-                    provider: "openai".into(),
-                    api_key: String::new(),
-                    base_url: String::new(),
-                    default_model: "gpt-4o".into(),
-                    team_root: ".".into(),
-                    code_root: None,
-                    max_tokens: 8192,
-                    temperature: 0.7,
-                },
-                Arc::new(HttpLlm::new()),
-                None,
-                tools::tool_defs(),
-            ))),
+            config,
+            bus,
+            identity,
+            skills,
+            runner: Arc::new(Mutex::new(runner)),
+            brain: Arc::new(Mutex::new(brain)),
             compact: Arc::new(AtomicBool::new(false)),
             done_queue: Arc::new(Mutex::new(Vec::new())),
         }
@@ -218,27 +197,6 @@ impl MYOPCApp {
                 serde_json::to_string(&task).unwrap_or_default()
             }
 
-            "read_workspace_file" => {
-                let path = args["path"].as_str().unwrap_or("");
-                let fp = root.join("workspace").join(path);
-                if fp.exists() {
-                    std::fs::read_to_string(&fp).unwrap_or_default()
-                } else {
-                    format!("File not found: {path}")
-                }
-            }
-
-            "write_workspace_file" => {
-                let path = args["path"].as_str().unwrap_or("");
-                let content = args["content"].as_str().unwrap_or("");
-                let fp = root.join("workspace").join(path);
-                if let Some(parent) = fp.parent() {
-                    std::fs::create_dir_all(parent).ok();
-                }
-                std::fs::write(&fp, content).ok();
-                format!("Written to {path}")
-            }
-
             "get_project_status" => {
                 let status = self.bus.get_all_status();
                 ui::print_status(&status);
@@ -300,74 +258,6 @@ impl MYOPCApp {
         }
     }
 
-    async fn create_project(&self, root: &Path, args: &Value) -> String {
-        let proj_name = args["name"].as_str().unwrap_or("project").to_string();
-        let location = args["location"].as_str().unwrap_or("workspace").to_string();
-        let parent = args["parent"].as_str().map(|s| s.to_string());
-        let title = args["title"].as_str().unwrap_or(&proj_name).to_string();
-        let keywords: Vec<String> = args
-            .get("keywords")
-            .and_then(|v| v.as_array())
-            .map(|a| a.iter().filter_map(|k| k.as_str().map(|s| s.to_string())).collect())
-            .unwrap_or_default();
-        let ws = root.join("workspace");
-        let home = std::env::var("HOME").map(PathBuf::from).unwrap_or_default();
-
-        let code_root: PathBuf = if let Some(p) = &parent {
-            let registry = self.load_registry(root);
-            let entry = registry.iter().find(|e| e["name"] == Value::String(p.clone()));
-            match entry {
-                Some(e) => {
-                    let dir = Path::new(e["code_path"].as_str().unwrap_or(""))
-                        .parent()
-                        .map(|d| d.to_path_buf())
-                        .unwrap_or_default();
-                    dir.join(&proj_name)
-                }
-                None if location == "desktop" => home.join("Desktop").join(&proj_name),
-                _ => ws.join(&proj_name).join("code"),
-            }
-        } else if location == "desktop" {
-            home.join("Desktop").join(&proj_name)
-        } else {
-            ws.join(&proj_name).join("code")
-        };
-
-        let artifacts_path = root.join(".artifacts").join(&proj_name);
-        std::fs::create_dir_all(&artifacts_path).ok();
-        std::fs::create_dir_all(&code_root).ok();
-
-        {
-            let mut runner = self.runner.lock().await;
-            runner.project_id = Some(proj_name.clone());
-            runner.code_root = Some(code_root.clone());
-        }
-
-        let entry = serde_json::json!({
-            "name": proj_name,
-            "title": title,
-            "code_path": code_root.to_string_lossy(),
-            "artifacts_path": artifacts_path.to_string_lossy(),
-            "created_at": chrono::Utc::now().to_rfc3339_opts(chrono::SecondsFormat::Millis, true),
-            "keywords": keywords,
-        });
-        self.save_to_registry(root, entry);
-
-        println!("  {} Project {} created", "📁".green(), proj_name.bold());
-        println!("      Artifacts: {}", artifacts_path.to_string_lossy());
-        println!("      Code:      {}", code_root.to_string_lossy());
-        if let Some(p) = &parent {
-            println!("      Sibling of: {p}");
-        }
-
-        serde_json::json!({
-            "project": proj_name,
-            "artifacts_path": artifacts_path.to_string_lossy(),
-            "code_path": code_root.to_string_lossy(),
-        })
-        .to_string()
-    }
-
     fn run_in_background(&self, role: &str, task_id: &str) {
         let runner = self.runner.clone();
         let queue = self.done_queue.clone();
@@ -381,10 +271,7 @@ impl MYOPCApp {
                 let mut r = runner.lock().await;
                 let summary = r.run(&role, &task_id).await;
                 let root = team_root_path(&config);
-                let artifact = match r.project_id.clone() {
-                    Some(pid) => root.join(".artifacts").join(pid).join(format!("{task_id}_{role}.md")),
-                    None => root.join(".artifacts").join(format!("{task_id}_{role}.md")),
-                };
+                let artifact = root.join(".artifacts").join(format!("{task_id}_{role}.md"));
                 let title = bus
                     .list_active(&role)
                     .iter()
@@ -409,29 +296,6 @@ impl MYOPCApp {
             let done = queue.remove(0);
             ui::print_task_notification(&done.role, &done.title, &done.summary, &done.artifact);
         }
-    }
-
-    fn load_registry(&self, root: &Path) -> Vec<Value> {
-        let p = root.join("workspace").join("project_registry.json");
-        if p.exists() {
-            std::fs::read_to_string(&p)
-                .ok()
-                .and_then(|s| serde_json::from_str(&s).ok())
-                .unwrap_or_default()
-        } else {
-            Vec::new()
-        }
-    }
-
-    fn save_to_registry(&self, root: &Path, entry: Value) {
-        let p = root.join("workspace").join("project_registry.json");
-        let mut registry = self.load_registry(root);
-        registry.retain(|e| e["name"] != entry["name"]);
-        registry.push(entry);
-        if let Some(parent) = p.parent() {
-            std::fs::create_dir_all(parent).ok();
-        }
-        std::fs::write(p, serde_json::to_string_pretty(&registry).unwrap()).ok();
     }
 
     async fn execute_bash(&self, command: &str, description: &str, root: &Path) -> String {
@@ -618,9 +482,33 @@ impl ToolExecutor for MYOPCApp {
 async fn main() {
     let args: Vec<String> = std::env::args().collect();
     if args.get(1).map(|s| s.as_str()) == Some("init") {
-        let cwd = std::env::current_dir().unwrap_or_default();
-        init_project(&cwd);
-        return;
+        if let Some(dir) = args.get(2) {
+            // myopc init <目录>: 不存在则创建 → init → cd → 进入 CLI
+            let target = PathBuf::from(dir);
+            if !target.exists() {
+                std::fs::create_dir_all(&target).ok();
+                println!("  {} Created {}", "+".green(), target.to_string_lossy());
+            }
+            if target.join(myopc::init::TEAM_DIR).exists() {
+                eprintln!("{}", format!(
+                    "Error: {} is already initialized ({} exists).",
+                    target.to_string_lossy(),
+                    myopc::init::TEAM_DIR
+                ).red());
+                std::process::exit(1);
+            }
+            init_project(&target);
+            if std::env::set_current_dir(&target).is_err() {
+                eprintln!("{}", format!("Error: cannot cd into {}", target.to_string_lossy()).red());
+                std::process::exit(1);
+            }
+            // 初始化完成后直接进入 CLI 模式
+        } else {
+            // myopc init: 仅初始化当前目录并退出
+            let cwd = std::env::current_dir().unwrap_or_default();
+            init_project(&cwd);
+            return;
+        }
     }
 
     let mut app = MYOPCApp::new();

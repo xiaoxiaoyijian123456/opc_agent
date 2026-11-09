@@ -6,7 +6,7 @@ use crate::tools::ToolDef;
 use std::sync::Arc;
 
 const BRAIN_RULES: &str = "
-You are OPC Brain, the central coordinator. Follow the AGENTS.md protocol and Handoff Protocols above.
+You are MYOPC Brain, the central coordinator. Follow the AGENTS.md protocol and Handoff Protocols above.
 
 Execution rules:
 - Chat queries: answer directly, no tools.
@@ -20,8 +20,7 @@ Execution rules:
 - Approval gates: call ask_user at mandatory gates (PRD review, tech decision, design review, launch readiness, budget/scope change). Wait for user approval before proceeding.
 - Agents learn from recent task history automatically.
 - Contract excerpting: when dispatching a task, read the project PRD and design_system.md first, then paste ONLY the sections relevant to that task into the dispatch content field. Never inject the full document — excerpt the minimum context the agent needs (acceptance criteria, related component specs, token values). Mark excerpts with [PRD excerpt] or [Design System excerpt] headers so agents know the source.
-- Project discovery: before creating a project, always call list_projects first. If any existing project's name or keywords overlap with the user's request (e.g. \"贪吃蛇2.0\" matches project with keyword \"贪吃蛇\"), call ask_user with options: 1) Place as sibling folder alongside existing project (pass parent=existing_project_name to create_project), 2) Create as independent new project. If no related project found, proceed with normal location choice.
-- Project creation: call create_project with title and keywords (2-5 terms from user request). Use ask_user with options to let user choose code location (workspace or desktop) unless parent is set. All subsequent agent file writes go to the project code directory.
+- Artifacts: each role's deliverable (PRD, design spec, test report, code summary) is written automatically by the system to `.artifacts/{task_id}_{role}.md` after the role finishes. Do NOT write artifact files yourself — never create or move files under `.artifacts/` or `workspace/`. Just report results in your reply.
 - Be concise.";
 
 pub struct Brain {
@@ -68,12 +67,10 @@ impl Brain {
                 }
             }
             parts.push(BRAIN_RULES.to_string());
-            if self.config.code_root.is_some() {
-                parts.push(format!(
-                    "Existing project mode: this working directory is the project code root (code_root: {}). Do NOT create a project. Dispatch role tasks directly; every write_file path is relative to this directory.",
-                    self.config.code_root.as_deref().unwrap()
-                ));
-            }
+            parts.push(format!(
+                "Working directory is the project code root (code_root: {}). Dispatch role tasks directly; every write_file path is relative to this directory.",
+                self.config.code_root.clone().unwrap_or_else(|| ".".into())
+            ));
             self.system_prompt_cache = Some(parts.join("\n"));
         }
         self.system_prompt_cache.clone().unwrap_or_default()

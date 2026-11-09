@@ -126,10 +126,8 @@ pub fn print_help() {
 }
 
 pub fn print_skills(extra_skills: &[(String, String)]) {
-    let builtins: [(&str, &str); 7] = [
+    let builtins: [(&str, &str); 5] = [
         ("dispatch_task", "Send task to a role"),
-        ("read_workspace_file", "Read workspace file"),
-        ("write_workspace_file", "Write workspace file"),
         ("get_project_status", "Get all agent status"),
         ("execute_role_task", "Run role agent on task"),
         ("run_bash", "Run shell command (requires user approval)"),
@@ -210,11 +208,11 @@ pub fn print_bash_output(stdout: &str, stderr: &str, return_code: i32) {
 }
 
 pub fn prompt_user_answer() -> String {
-    use dialoguer::Input;
     print!("  Your answer: ");
     let _ = std::io::stdout().flush();
-    match Input::<String>::new().allow_empty(true).interact_text() {
-        Ok(s) => {
+    let mut s = String::new();
+    match std::io::stdin().read_line(&mut s) {
+        Ok(_) => {
             let s = s.trim().to_string();
             if s.is_empty() { "(no answer)".to_string() } else { s }
         }
@@ -223,15 +221,27 @@ pub fn prompt_user_answer() -> String {
 }
 
 pub fn prompt_user_select(options: &[(String, String)]) -> String {
-    use dialoguer::Select;
-    let mut items: Vec<String> = options.iter().map(|o| o.0.clone()).collect();
-    items.push("自由输入...".to_string());
-    match Select::new().with_prompt("Choose:").items(&items).interact() {
-        Ok(idx) => {
-            if idx == options.len() {
-                prompt_user_answer()
-            } else {
-                options[idx].1.clone()
+    println!();
+    for (i, (label, _)) in options.iter().enumerate() {
+        println!("    {}: {}", i + 1, label);
+    }
+    println!("    {}: {}", options.len() + 1, "自由输入...");
+    print!("  请选择 (1-{}): ", options.len() + 1);
+    let _ = std::io::stdout().flush();
+    let mut s = String::new();
+    match std::io::stdin().read_line(&mut s) {
+        Ok(_) => {
+            let t = s.trim().to_string();
+            match t.parse::<usize>() {
+                Ok(n) if n >= 1 && n <= options.len() => options[n - 1].1.clone(),
+                Ok(n) if n == options.len() + 1 => prompt_user_answer(),
+                _ => {
+                    if t.is_empty() {
+                        "(skipped)".to_string()
+                    } else {
+                        t
+                    }
+                }
             }
         }
         Err(_) => "(skipped)".to_string(),
@@ -239,15 +249,17 @@ pub fn prompt_user_select(options: &[(String, String)]) -> String {
 }
 
 pub fn prompt_bash_approval(command: &str, description: &str) -> bool {
-    use dialoguer::Confirm;
     println!();
     if !description.is_empty() {
         println!("  {}", description.dimmed());
     }
     println!("  {} {}", "$".bold().yellow(), command.white());
     println!();
-    match Confirm::new().with_prompt("Run this command? (y/n)").default(false).interact() {
-        Ok(v) => v,
+    print!("  Run this command? (y/n): ");
+    let _ = std::io::stdout().flush();
+    let mut s = String::new();
+    match std::io::stdin().read_line(&mut s) {
+        Ok(_) => ["y", "yes"].contains(&s.trim().to_lowercase().as_str()),
         Err(_) => false,
     }
 }

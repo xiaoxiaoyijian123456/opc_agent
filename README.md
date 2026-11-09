@@ -126,8 +126,6 @@ my-startup/
 
 `myopc init` 只生成团队目录，**不生成项目内配置文件**——配置统一使用全局 `~/.myopc/myopc.json`（init 不覆盖已有文件）。
 
-> 想改用「多项目」布局（代码放到 `workspace/{project}/code`），删除全局 `myopc.json` 里的 `code_root` 字段即可。
-
 ### 配置 API Key
 
 编辑全局配置 `~/.myopc/myopc.json`：
@@ -296,11 +294,8 @@ my-startup/
     │   └── handoff_protocols.md      ← 角色交接规范
     │
     ├── .artifacts/                   ← 角色产出物（PRD、设计、测试报告）
-    │   └── {project}/                ← 多项目时按项目分目录
     │
-    ├── workspace/
-    │   ├── {project}/code/           ← Dev/UI 写出的代码文件
-    │   └── project_registry.json     ← 项目注册表
+    ├── workspace/                    ← 工作区（运行时目录）
     │
     ├── staff/
     │   ├── boss_decide/              ← Boss 身份 + 干预开关
@@ -321,7 +316,7 @@ my-startup/
         └── hello_world/              ← 示例插件
 ```
 
-> 多项目模式下，产出物写到 `.artifacts/{project}/`，代码写到 `workspace/{project}/code/`；也可通过 `create_project` 选择把代码输出到桌面等外部目录。
+> 代码统一写入当前目录（`code_root: "."`），产出物写到 `.artifacts/`。
 
 ---
 
@@ -350,7 +345,7 @@ my-startup/
 | `base_url` | API 端点（兼容 OpenAI 格式的服务都能用） | `https://api.openai.com/v1` |
 | `default_model` | 模型名称 | `gpt-4o` |
 | `team_root` | 团队根目录（相对启动目录） | `.` |
-| `code_root` | 代码根目录；`"."` 表示当前目录就是代码目录（默认值）。留空则使用多项目布局 `workspace/{project}/code` | `.` |
+| `code_root` | 代码根目录；`"."` 表示当前目录就是代码目录（默认值） | `.` |
 | `max_tokens` | 单次回复最大 token 数 | `8192` |
 | `temperature` | 生成温度 (0-2) | `0.7` |
 

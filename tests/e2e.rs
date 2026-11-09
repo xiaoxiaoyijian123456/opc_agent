@@ -138,26 +138,12 @@ fn resolve_write_target_mappings() {
     assert!(case("/abs/path").is_none());
     assert!(case("").is_none());
 
-    // project-scoped
-    let runner = runner_with_project(runner, "p1".to_string());
-    let (full, display) = runner.resolve_write_target("artifacts/y.md").unwrap();
-    assert_eq!(full, dir.join(".myopc_agent/.artifacts/p1/y.md"));
-    assert_eq!(display, "y.md");
-
-    let (full, display) = runner.resolve_write_target("p1/src.go").unwrap();
-    assert_eq!(full, code_root.join("src.go"));
-    assert_eq!(display, "src.go");
-
     std::fs::remove_dir_all(&dir).ok();
 }
 
 // Helper: AgentRunner field setters (pub fields)
 fn runner_set_code_root(mut r: AgentRunner, cr: PathBuf) -> AgentRunner {
     r.code_root = Some(cr);
-    r
-}
-fn runner_with_project(mut r: AgentRunner, pid: String) -> AgentRunner {
-    r.project_id = Some(pid);
     r
 }
 

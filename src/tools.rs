@@ -27,27 +27,6 @@ pub fn tool_defs() -> Vec<ToolDef> {
             }),
         },
         ToolDef {
-            name: "read_workspace_file".into(),
-            description: "Read a file from the workspace directory".into(),
-            parameters: json!({
-                "type": "object",
-                "properties": { "path": { "type": "string" } },
-                "required": ["path"]
-            }),
-        },
-        ToolDef {
-            name: "write_workspace_file".into(),
-            description: "Write content to a file in the workspace directory".into(),
-            parameters: json!({
-                "type": "object",
-                "properties": {
-                    "path": { "type": "string" },
-                    "content": { "type": "string" }
-                },
-                "required": ["path", "content"]
-            }),
-        },
-        ToolDef {
             name: "get_project_status".into(),
             description: "Get current status of all agents and tasks".into(),
             parameters: json!({ "type": "object", "properties": {} }),
