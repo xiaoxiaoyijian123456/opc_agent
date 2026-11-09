@@ -147,6 +147,27 @@ fn runner_set_code_root(mut r: AgentRunner, cr: PathBuf) -> AgentRunner {
     r
 }
 
+#[test]
+fn artifact_root_always_under_myopc_agent() {
+    let dir = temp_dir("artifact_root");
+
+    // 形态 1：team_root 已指向 .myopc_agent 目录（配置 team_root = ".myopc_agent"）
+    let team_root = dir.join(".myopc_agent");
+    std::fs::create_dir_all(&team_root).ok();
+    assert_eq!(
+        myopc::agent_runner::artifact_root(&team_root),
+        dir.join(".myopc_agent/.artifacts")
+    );
+
+    // 形态 2：team_root 指向项目根目录（默认 "."），仍须产出到 .myopc_agent/.artifacts
+    assert_eq!(
+        myopc::agent_runner::artifact_root(&dir),
+        dir.join(".myopc_agent/.artifacts")
+    );
+
+    std::fs::remove_dir_all(&dir).ok();
+}
+
 #[tokio::test]
 async fn agent_run_writes_code_and_artifact() {
     let dir = temp_dir("run");
