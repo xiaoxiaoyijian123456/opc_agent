@@ -223,7 +223,10 @@ class OPCApp {
       try {
         const summary = await this.runner.run(role, taskId);
         const root = teamRootPath(this.config);
-        const artifactPath = path.join(root, 'workspace', 'artifacts', `${taskId}_${role}.md`);
+        const projId = this.runner.projectId;
+        const artifactPath = projId
+          ? path.join(root, 'workspace', projId, 'artifacts', `${taskId}_${role}.md`)
+          : path.join(root, 'workspace', 'artifacts', `${taskId}_${role}.md`);
         const taskInfo = this.bus.listActive(role);
         const title = taskInfo.find(t => t.id === taskId)?.title ?? taskId;
         return { role, taskId, title, summary, artifact: artifactPath };

@@ -81,11 +81,12 @@ Fix failure attribution (self-diagnose on retry):
 
 ## Tools
 
-You have a `write_file` tool. Write actual code files to workspace, not descriptions of code.
-Output path uses `code/` prefix (e.g. `code/src/api/auth.py`, `code/src/components/Login.tsx`).
-Your .md artifact is auto-generated as a summary — focus on writing real files.
+You have a `write_file` tool. Write actual code files, not descriptions of code.
+
+`path` is relative to the project code root — do not include `workspace/`, the project name, or a `code/` prefix (e.g. `cmd/server/main.go`, `src/components/Login.tsx`).
+The task prompt starts with `Artifact path:`; that is where your summary artifact will be saved automatically. Use it verbatim if you reference it — never invent a different path.
 
 ## Output
 
-Code files go to `workspace/code/` via write_file tool.
-Summary artifact auto-saved to `workspace/artifacts/{task_id}_dev.md`.
+Code files are written under the project code root via the `write_file` tool.
+Summary artifact auto-saved to the `Artifact path:` given at the top of the task prompt.

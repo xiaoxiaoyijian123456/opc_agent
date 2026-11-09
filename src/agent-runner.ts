@@ -31,9 +31,13 @@ const AGENT_TOOL_DEFS: Record<string, AgentToolDef> = {
   },
   write_file: {
     name: 'write_file',
-    description: 'Write a file to the project workspace (code, config, assets).',
+    description:
+      'Write a file under the project code root. Path must be relative to the code root (e.g. "cmd/server/main.go"), without any "workspace/", project name, or leading "/" prefix.',
     properties: {
-      path: { type: 'string', description: 'Relative path' },
+      path: {
+        type: 'string',
+        description: 'Path relative to the project code root, e.g. "internal/handler/user.go"',
+      },
       content: { type: 'string', description: 'Full file content' },
     },
     required: ['path', 'content'],
@@ -102,8 +106,25 @@ export class AgentRunner {
     const task = this.bus.claim(role, taskId);
     if (!task) return `No task ${taskId} in ${role} inbox`;
 
+    const projectDir = this.projectId
+      ? path.join(this.workspace, this.projectId)
+      : this.workspace;
+    const artifactDir = path.join(projectDir, 'artifacts');
+    const artifactPath = path.join(artifactDir, `${taskId}_${role}.md`);
+    const artifactRel = this.projectId
+      ? `workspace/${this.projectId}/artifacts/${taskId}_${role}.md`
+      : `workspace/artifacts/${taskId}_${role}.md`;
+
     const system = this.identity.buildSystemPrompt(role);
-    const userMsg = `Task: ${task.title}\n\n${task.content}`;
+    const userMsg = [
+      `Task ID: ${taskId}`,
+      `Artifact path: ${artifactRel} (written automatically by the system after you finish)`,
+      'If you mention the artifact in your output, use exactly the path above. Do not invent a different filename or path.',
+      '',
+      `Task: ${task.title}`,
+      '',
+      task.content,
+    ].join('\n');
 
     let resultText: string;
     let writtenFiles: string[] = [];
@@ -124,12 +145,7 @@ export class AgentRunner {
       return `Agent ${role} failed: ${e.message}`;
     }
 
-    const projectDir = this.projectId
-      ? path.join(this.workspace, this.projectId)
-      : this.workspace;
-    const artifactDir = path.join(projectDir, 'artifacts');
     fs.ensureDirSync(artifactDir);
-    const artifactPath = path.join(artifactDir, `${taskId}_${role}.md`);
 
     let artifactContent = resultText;
     if (writtenFiles.length > 0) {
@@ -148,23 +164,52 @@ export class AgentRunner {
     return summary;
   }
 
+  private resolveWriteTarget(rawPath: string): { fullPath: string; display: string } | null {
+    const projectDir = this.projectId
+      ? path.join(this.workspace, this.projectId)
+      : this.workspace;
+    const codeBase = this.codeRoot ?? path.join(projectDir, 'code');
+
+    let rel = (rawPath ?? '').replace(/\\/g, '/').trim();
+    rel = rel.replace(/^\.\//, '');
+    rel = rel.replace(/^workspace\//, '');
+    if (this.projectId) {
+      const projPrefix = `${this.projectId}/`;
+      if (rel.startsWith(projPrefix)) rel = rel.slice(projPrefix.length);
+    }
+
+    let base = codeBase;
+    if (rel.startsWith('artifacts/')) {
+      base = path.join(projectDir, 'artifacts');
+      rel = rel.slice('artifacts/'.length);
+    } else if (rel.startsWith('code/')) {
+      rel = rel.slice('code/'.length);
+    }
+
+    if (!rel || rel.startsWith('/')) return null;
+
+    const baseResolved = path.resolve(base);
+    const fullPath = path.resolve(baseResolved, rel);
+    if (fullPath !== baseResolved && !fullPath.startsWith(baseResolved + path.sep)) {
+      return null;
+    }
+    return {
+      fullPath,
+      display: path.relative(baseResolved, fullPath).split(path.sep).join('/'),
+    };
+  }
+
   private async handleTool(name: string, args: Record<string, any>, role: string): Promise<string> {
     if (name === 'write_file') {
-      const relPath = args.path ?? '';
       const content = args.content ?? '';
-      let fullPath: string;
-      if (this.codeRoot) {
-        fullPath = path.join(this.codeRoot, relPath);
-      } else {
-        const projectDir = this.projectId
-          ? path.join(this.workspace, this.projectId)
-          : this.workspace;
-        fullPath = path.join(projectDir, 'code', relPath);
+      const target = this.resolveWriteTarget(args.path ?? '');
+      if (!target) {
+        return `Invalid path: ${args.path}. Must stay inside the project code root.`;
       }
-      fs.ensureDirSync(path.dirname(fullPath));
-      fs.writeFileSync(fullPath, content);
-      ui.printFileWritten(role, relPath);
-      return `Written: ${relPath} (${content.length} bytes)`;
+      fs.ensureDirSync(path.dirname(target.fullPath));
+      fs.writeFileSync(target.fullPath, content);
+      ui.printFileWritten(role, target.display);
+      return `Written: ${target.display} (${content.length} bytes)`;
     }
 
     if (name === 'ask_user') {
@@ -226,7 +271,8 @@ export class AgentRunner {
         const args = JSON.parse(tc.function.arguments);
         const result = await this.handleTool(tc.function.name, args, role);
         if (tc.function.name === 'write_file') {
-          writtenFiles.push(args.path ?? '');
+          const target = this.resolveWriteTarget(args.path ?? '');
+          if (target) writtenFiles.push(target.display);
         }
         messages.push({
           role: 'tool',
@@ -283,7 +329,8 @@ export class AgentRunner {
           });
           const result = await this.handleTool(block.name, block.input as Record<string, any>, role);
           if (block.name === 'write_file') {
-            writtenFiles.push((block.input as any).path ?? '');
+            const target = this.resolveWriteTarget((block.input as any).path ?? '');
+            if (target) writtenFiles.push(target.display);
           }
           toolResults.push({
             type: 'tool_result',

@@ -47,5 +47,5 @@ You have a `write_file` tool. Write `design_system.md` directly using the templa
 
 ## Output
 
-Design system file: write via `write_file` tool to `code/design_system.md`.
-Summary artifact auto-saved to `workspace/artifacts/{task_id}_ui.md`.
+Design system file: write via the `write_file` tool to `design_system.md`, relative to the project code root (no `code/`, `workspace/`, or project-name prefix).
+Summary artifact auto-saved to the `Artifact path:` given at the top of the task prompt. Use that path verbatim if you reference it.

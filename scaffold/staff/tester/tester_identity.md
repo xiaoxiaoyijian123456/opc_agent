@@ -34,4 +34,4 @@ Same bug fails ≥3 fixes → escalate to PM.
 
 ## Output
 
-`workspace/artifacts/{task_id}_tester.md`
+Your report is auto-saved to the `Artifact path:` given at the top of the task prompt. Use that path verbatim if you reference it — never invent a different filename or directory.

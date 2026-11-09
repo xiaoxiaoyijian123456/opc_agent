@@ -78,4 +78,4 @@ Each chunk must be independently verifiable — no "works only after next chunk"
 
 ## Output
 
-Artifacts go to `workspace/artifacts/`. PRD named `{task_id}_pm.md`.
+The system writes your artifact automatically. Its exact path is given as `Artifact path:` at the top of the task prompt — use that path verbatim if you reference it, and never invent a different filename or directory.
