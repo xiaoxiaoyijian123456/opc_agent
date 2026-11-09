@@ -13,6 +13,9 @@ pub struct Config {
     pub code_root: Option<String>,
     pub max_tokens: u32,
     pub temperature: f32,
+    pub llm_connect_timeout_seconds: u64,
+    pub llm_request_timeout_seconds: u64,
+    pub llm_max_attempts: u32,
 }
 
 #[derive(Deserialize, Default)]
@@ -26,6 +29,9 @@ struct RawConfig {
     code_root: Option<String>,
     max_tokens: Option<u32>,
     temperature: Option<f32>,
+    llm_connect_timeout_seconds: Option<u64>,
+    llm_request_timeout_seconds: Option<u64>,
+    llm_max_attempts: Option<u32>,
 }
 
 fn defaults() -> Config {
@@ -38,6 +44,9 @@ fn defaults() -> Config {
         code_root: Some(".".into()),
         max_tokens: 8192,
         temperature: 0.7,
+        llm_connect_timeout_seconds: 10,
+        llm_request_timeout_seconds: 180,
+        llm_max_attempts: 3,
     }
 }
 
@@ -107,6 +116,15 @@ fn merge_into(base: &mut Config, raw: RawConfig) {
     if let Some(value) = raw.temperature {
         base.temperature = value;
     }
+    if let Some(value) = raw.llm_connect_timeout_seconds {
+        base.llm_connect_timeout_seconds = value;
+    }
+    if let Some(value) = raw.llm_request_timeout_seconds {
+        base.llm_request_timeout_seconds = value;
+    }
+    if let Some(value) = raw.llm_max_attempts {
+        base.llm_max_attempts = value;
+    }
 }
 
 fn home() -> PathBuf {
@@ -132,6 +150,21 @@ fn apply_env_override(config: &mut Config, name: &str, value: String) -> Result<
             config.temperature = value
                 .parse()
                 .map_err(|_| format!("{name} must be a number from 0 to 2, got {value:?}"))?;
+        }
+        "MYOPC_LLM_CONNECT_TIMEOUT_SECONDS" => {
+            config.llm_connect_timeout_seconds = value
+                .parse()
+                .map_err(|_| format!("{name} must be a positive integer, got {value:?}"))?;
+        }
+        "MYOPC_LLM_REQUEST_TIMEOUT_SECONDS" => {
+            config.llm_request_timeout_seconds = value
+                .parse()
+                .map_err(|_| format!("{name} must be a positive integer, got {value:?}"))?;
+        }
+        "MYOPC_LLM_MAX_ATTEMPTS" => {
+            config.llm_max_attempts = value
+                .parse()
+                .map_err(|_| format!("{name} must be an integer from 1 to 10, got {value:?}"))?;
         }
         _ => return Ok(()),
     }
@@ -167,6 +200,15 @@ fn validate_values(config: &Config) -> Vec<String> {
     if !config.temperature.is_finite() || !(0.0..=2.0).contains(&config.temperature) {
         errors.push("temperature must be from 0 to 2".into());
     }
+    if config.llm_connect_timeout_seconds == 0 {
+        errors.push("llm_connect_timeout_seconds must be greater than 0".into());
+    }
+    if config.llm_request_timeout_seconds == 0 {
+        errors.push("llm_request_timeout_seconds must be greater than 0".into());
+    }
+    if !(1..=10).contains(&config.llm_max_attempts) {
+        errors.push("llm_max_attempts must be from 1 to 10".into());
+    }
     errors
 }
 
@@ -188,7 +230,7 @@ pub fn load_config() -> Result<Config, Vec<String>> {
         }
     }
 
-    const ENV_NAMES: [&str; 8] = [
+    const ENV_NAMES: [&str; 11] = [
         "MYOPC_API_KEY",
         "MYOPC_BASE_URL",
         "MYOPC_MODEL",
@@ -197,6 +239,9 @@ pub fn load_config() -> Result<Config, Vec<String>> {
         "MYOPC_CODE_ROOT",
         "MYOPC_MAX_TOKENS",
         "MYOPC_TEMPERATURE",
+        "MYOPC_LLM_CONNECT_TIMEOUT_SECONDS",
+        "MYOPC_LLM_REQUEST_TIMEOUT_SECONDS",
+        "MYOPC_LLM_MAX_ATTEMPTS",
     ];
     for name in ENV_NAMES {
         if let Ok(value) = std::env::var(name) {
@@ -260,6 +305,9 @@ mod tests {
         let config = defaults();
         assert_eq!(config.team_root, ".myopc_agent");
         assert_eq!(config.code_root.as_deref(), Some("."));
+        assert_eq!(config.llm_connect_timeout_seconds, 10);
+        assert_eq!(config.llm_request_timeout_seconds, 180);
+        assert_eq!(config.llm_max_attempts, 3);
     }
 
     #[test]
@@ -301,11 +349,15 @@ mod tests {
         config.temperature = 3.0;
         config.max_tokens = 0;
         config.base_url = "not-a-url".into();
+        config.llm_max_attempts = 0;
 
         let errors = validate_values(&config);
         assert!(errors.iter().any(|error| error.contains("temperature")));
         assert!(errors.iter().any(|error| error.contains("max_tokens")));
         assert!(errors.iter().any(|error| error.contains("base_url")));
+        assert!(errors
+            .iter()
+            .any(|error| error.contains("llm_max_attempts")));
     }
 
     #[test]

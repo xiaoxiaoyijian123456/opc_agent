@@ -50,6 +50,9 @@ fn test_config(team_root: &std::path::Path) -> Config {
         code_root: None,
         max_tokens: 8192,
         temperature: 0.7,
+        llm_connect_timeout_seconds: 10,
+        llm_request_timeout_seconds: 180,
+        llm_max_attempts: 3,
     }
 }
 
@@ -151,6 +154,7 @@ fn resolve_write_target_mappings() {
         Arc::new(MockLlm {
             responses: Arc::new(Mutex::new(VecDeque::new())),
         }),
+        myopc::notification::NotificationQueue::default(),
     );
     let code_root = dir.join("code");
     std::fs::create_dir_all(&code_root).unwrap();
@@ -241,6 +245,7 @@ async fn agent_run_writes_code_and_artifact() {
         Arc::new(MockLlm {
             responses: responses.clone(),
         }),
+        myopc::notification::NotificationQueue::default(),
     );
     runner.code_root = Some(code_root.clone());
 

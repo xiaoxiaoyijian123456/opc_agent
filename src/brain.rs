@@ -1,7 +1,7 @@
 use crate::agent_runner::ToolExecutor;
 use crate::config::Config;
 use crate::identity::IdentityEngine;
-use crate::llm::{LlmBackend, LlmResponse, Msg};
+use crate::llm::{validate_tool_call, LlmBackend, LlmResponse, Msg};
 use crate::tools::ToolDef;
 use std::sync::Arc;
 
@@ -18,6 +18,8 @@ Execution rules:
 - PRD approval is mandatory and is handled by the orchestrator. Do not call ask_user to approve your own PRD.
 - Artifacts: each role's deliverable (PRD, design spec, test report, code summary) is written automatically by the system to `.myopc_agent/.artifacts/{task_id}_{role}.md` after the role finishes. Do NOT write artifact files yourself — never create or move files under `.myopc_agent/.artifacts/` or `workspace/`. Just report results in your reply.
 - Be concise.";
+
+const MAX_TOOL_ROUNDS: u32 = 30;
 
 pub struct Brain {
     config: Config,
@@ -85,6 +87,7 @@ impl Brain {
     }
 
     async fn chat_openai(&mut self, executor: Arc<dyn ToolExecutor>) -> Result<String, String> {
+        let mut tool_rounds = 0;
         loop {
             let resp: LlmResponse = self
                 .llm
@@ -93,6 +96,15 @@ impl Brain {
             if resp.tool_calls.is_empty() {
                 self.messages.push(Msg::Assistant(resp.text.clone()));
                 return Ok(resp.text);
+            }
+            tool_rounds += 1;
+            if tool_rounds > MAX_TOOL_ROUNDS {
+                return Err(format!(
+                    "Brain exceeded max tool rounds ({MAX_TOOL_ROUNDS}); start a new chat after resolving the tool error"
+                ));
+            }
+            for call in &resp.tool_calls {
+                validate_tool_call(call).map_err(|error| format!("Invalid tool call: {error}"))?;
             }
             self.messages
                 .push(Msg::AssistantToolCalls(resp.tool_calls.clone()));
@@ -115,6 +127,7 @@ impl Brain {
             .filter(|m| matches!(m, Msg::User(_) | Msg::Assistant(_)))
             .cloned()
             .collect();
+        let mut tool_rounds = 0;
         loop {
             let resp: LlmResponse = self
                 .llm
@@ -123,6 +136,15 @@ impl Brain {
             if resp.tool_calls.is_empty() {
                 self.messages.push(Msg::Assistant(resp.text.clone()));
                 return Ok(resp.text);
+            }
+            tool_rounds += 1;
+            if tool_rounds > MAX_TOOL_ROUNDS {
+                return Err(format!(
+                    "Brain exceeded max tool rounds ({MAX_TOOL_ROUNDS}); start a new chat after resolving the tool error"
+                ));
+            }
+            for call in &resp.tool_calls {
+                validate_tool_call(call).map_err(|error| format!("Invalid tool call: {error}"))?;
             }
             api_messages.push(Msg::AssistantToolCalls(resp.tool_calls.clone()));
             for tc in resp.tool_calls {

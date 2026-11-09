@@ -2,7 +2,8 @@ use crate::bus::{Bus, Task};
 use crate::config::Config;
 use crate::identity::IdentityEngine;
 use crate::init::TEAM_DIR;
-use crate::llm::{LlmBackend, LlmResponse, Msg};
+use crate::llm::{validate_tool_call, LlmBackend, LlmResponse, Msg};
+use crate::notification::NotificationQueue;
 use crate::redaction::contains_secret;
 use crate::safe_write::{atomic_write_private, SafeFileWriter};
 use crate::tools::ToolDef;
@@ -42,6 +43,7 @@ pub struct AgentRunner {
     workspace: PathBuf,
     llm: Arc<dyn LlmBackend>,
     pub code_root: Option<PathBuf>,
+    notifications: NotificationQueue,
 }
 
 pub fn normalize_path(p: &Path) -> PathBuf {
@@ -92,6 +94,7 @@ impl AgentRunner {
         identity: IdentityEngine,
         workspace: PathBuf,
         llm: Arc<dyn LlmBackend>,
+        notifications: NotificationQueue,
     ) -> AgentRunner {
         AgentRunner {
             config,
@@ -100,6 +103,7 @@ impl AgentRunner {
             workspace,
             llm,
             code_root: None,
+            notifications,
         }
     }
 
@@ -250,6 +254,7 @@ impl AgentRunner {
             }
             messages.push(Msg::AssistantToolCalls(resp.tool_calls.clone()));
             for tc in resp.tool_calls {
+                validate_tool_call(&tc).map_err(|error| format!("Invalid tool call: {error}"))?;
                 let result = self.handle_tool(&tc.name, &tc.arguments, role).await;
                 if let Some(display) = result.written_file {
                     written_files.push(display);
@@ -278,7 +283,8 @@ impl AgentRunner {
                 .and_then(|writer| writer.write(raw_path, content))
             {
                 Ok(outcome) => {
-                    ui::print_file_written(role, &outcome.display);
+                    self.notifications
+                        .push(format!("📄 {role} wrote: {}", outcome.display));
                     ToolHandling {
                         message: format!("Written: {} ({} bytes)", outcome.display, content.len()),
                         written_file: Some(outcome.display),
@@ -310,11 +316,12 @@ impl AgentRunner {
                         .collect()
                 })
                 .unwrap_or_default();
+            let prompt = ui::prompt_session();
             ui::print_deepthink_question(role, &self.config.redact(question));
             let message = if options.is_empty() {
-                ui::prompt_user_answer()
+                prompt.answer()
             } else {
-                ui::prompt_user_select(&options)
+                prompt.select(&options)
             };
             ToolHandling {
                 message,

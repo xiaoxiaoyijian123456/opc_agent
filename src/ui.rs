@@ -231,52 +231,74 @@ pub fn print_bash_output(stdout: &str, stderr: &str, return_code: i32) {
     }
 }
 
-pub fn prompt_user_answer() -> String {
-    print!("  Your answer: ");
-    let _ = std::io::stdout().flush();
-    let mut s = String::new();
-    match std::io::stdin().read_line(&mut s) {
-        Ok(_) => {
-            let s = s.trim().to_string();
-            if s.is_empty() {
-                "(no answer)".to_string()
-            } else {
-                s
-            }
-        }
-        Err(_) => "(skipped)".to_string(),
+pub struct PromptSession {
+    _guard: PromptGuard,
+}
+
+pub fn prompt_session() -> PromptSession {
+    PromptSession {
+        _guard: crate::input::prompt_guard(),
     }
 }
 
-pub fn prompt_user_select(options: &[(String, String)]) -> String {
-    if options.is_empty() {
-        return prompt_user_answer();
-    }
-    println!();
-    for (i, (label, _)) in options.iter().enumerate() {
-        if i == 0 {
-            println!("    {}: {}（建议，回车默认选中）", i + 1, label);
-        } else {
-            println!("    {}: {}", i + 1, label);
+impl PromptSession {
+    pub fn answer(&self) -> String {
+        print!("  Your answer: ");
+        let _ = std::io::stdout().flush();
+        let mut input = String::new();
+        match std::io::stdin().read_line(&mut input) {
+            Ok(_) => {
+                let input = input.trim().to_string();
+                if input.is_empty() {
+                    "(no answer)".to_string()
+                } else {
+                    input
+                }
+            }
+            Err(_) => "(skipped)".to_string(),
         }
     }
-    println!("    {}: 自由输入...", options.len() + 1);
-    print!("  请选择 (1-{}，回车选中建议项): ", options.len() + 1);
-    let _ = std::io::stdout().flush();
-    let mut s = String::new();
-    match std::io::stdin().read_line(&mut s) {
-        Ok(_) => {
-            let t = s.trim().to_string();
-            if t.is_empty() {
-                // 回车 → 默认选中建议项（第一个选项）
-                return options[0].1.clone();
-            }
-            match t.parse::<usize>() {
-                Ok(n) if n >= 1 && n <= options.len() => options[n - 1].1.clone(),
-                Ok(n) if n == options.len() + 1 => prompt_user_answer(),
-                _ => t, // 非数字文本 → 视为自由输入
+
+    pub fn select(&self, options: &[(String, String)]) -> String {
+        if options.is_empty() {
+            return self.answer();
+        }
+        println!();
+        for (index, (label, _)) in options.iter().enumerate() {
+            if index == 0 {
+                println!("    {}: {}（建议，回车默认选中）", index + 1, label);
+            } else {
+                println!("    {}: {}", index + 1, label);
             }
         }
-        Err(_) => "(skipped)".to_string(),
+        println!("    {}: 自由输入...", options.len() + 1);
+        print!("  请选择 (1-{}，回车选中建议项): ", options.len() + 1);
+        let _ = std::io::stdout().flush();
+        let mut input = String::new();
+        match std::io::stdin().read_line(&mut input) {
+            Ok(_) => {
+                let input = input.trim().to_string();
+                if input.is_empty() {
+                    return options[0].1.clone();
+                }
+                match input.parse::<usize>() {
+                    Ok(number) if number >= 1 && number <= options.len() => {
+                        options[number - 1].1.clone()
+                    }
+                    Ok(number) if number == options.len() + 1 => self.answer(),
+                    _ => input,
+                }
+            }
+            Err(_) => "(skipped)".to_string(),
+        }
     }
 }
+
+pub fn prompt_user_answer() -> String {
+    prompt_session().answer()
+}
+
+pub fn prompt_user_select(options: &[(String, String)]) -> String {
+    prompt_session().select(options)
+}
+use crate::input::PromptGuard;

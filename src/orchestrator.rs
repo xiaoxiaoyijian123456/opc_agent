@@ -1,4 +1,5 @@
 use crate::agent_runner::AgentRunner;
+use crate::notification::NotificationQueue;
 use crate::redaction::redact_text;
 use crate::task::Workflow;
 use crate::task_store::TaskStore;
@@ -42,17 +43,18 @@ impl CliPrdApproval {
 #[async_trait]
 impl PrdApproval for CliPrdApproval {
     async fn review(&self, review: PrdReview) -> PrdDecision {
+        let prompt = ui::prompt_session();
         println!("\nPRD ready: {}", review.artifact_path);
         println!("Workflow: {}", review.template.join(" -> "));
         println!("Requires UI: {} — {}", review.requires_ui, review.reason);
         println!("Choose explicitly: [a]pprove / [r]evise / [t]erminate");
         loop {
-            let answer = ui::prompt_user_answer();
+            let answer = prompt.answer();
             match answer.trim().to_lowercase().as_str() {
                 "a" | "approve" => return PrdDecision::Approve,
                 "r" | "revise" => loop {
                     println!("Revision feedback (required):");
-                    let feedback = ui::prompt_user_answer();
+                    let feedback = prompt.answer();
                     if feedback.trim() == "/terminate" {
                         return PrdDecision::Terminate;
                     }
@@ -73,6 +75,7 @@ pub struct Orchestrator {
     store: TaskStore,
     runner: Arc<Mutex<AgentRunner>>,
     approval: Arc<dyn PrdApproval>,
+    notifications: NotificationQueue,
 }
 
 pub fn parse_requires_ui(text: &str) -> Result<(bool, String), String> {
@@ -108,11 +111,13 @@ impl Orchestrator {
         store: TaskStore,
         runner: Arc<Mutex<AgentRunner>>,
         approval: Arc<dyn PrdApproval>,
+        notifications: NotificationQueue,
     ) -> Self {
         Self {
             store,
             runner,
             approval,
+            notifications,
         }
     }
 
@@ -223,7 +228,8 @@ impl Orchestrator {
                         .ok_or("Active workflow has no current task")?;
                     let task = self.store.task(&task_id)?;
                     let attempt = self.store.begin_attempt(&task.id)?;
-                    ui::print_agent_working(&task.role, &task.title);
+                    self.notifications
+                        .push(format!("▶ {} working on: {}", task.role, task.title));
                     let execution = {
                         let runner = self.runner.lock().await;
                         runner.execute_task(&task.runner_task()).await
@@ -235,7 +241,8 @@ impl Orchestrator {
                             continue;
                         }
                     };
-                    ui::print_agent_done(&task.role, &execution.summary);
+                    self.notifications
+                        .push(format!("✓ {} done: {}", task.role, execution.summary));
                     if task.role == "pm" && task.msg_type == "requirement" {
                         match parse_requires_ui(&execution.text) {
                             Ok((requires_ui, reason)) => self.store.finish_pm(

@@ -245,8 +245,9 @@ impl SkillLoader {
         if metadata.file_type().is_symlink() || !metadata.is_dir() {
             return format!("Skill '{skill_name}' is not an installed skill directory.");
         }
+        let prompt = ui::prompt_session();
         println!("Remove skill '{skill_name}' at {}? [y/N]", target.display());
-        let answer = ui::prompt_user_answer();
+        let answer = prompt.answer();
         if !matches!(answer.trim().to_lowercase().as_str(), "y" | "yes") {
             return "Cancelled.".into();
         }

@@ -157,6 +157,8 @@ my-startup/
 myopc
 ```
 
+问答和角色工作流在后台执行。运行期间仍可使用 `/status`、`/tasks`、`/help` 和 `/exit`；完成或失败通知会排队，在命令提示符安全输出，不会插入正在进行的审批输入。退出会终止受管子进程，未完成任务不会被标记为成功，遗留活动任务在下次启动时按中断处理。
+
 ```
 ┌──────────────────────────────────────┐
 │ MYOPC Team Agent v0.1                  │
@@ -355,6 +357,9 @@ my-startup/
 | `code_root` | 代码根目录；`"."` 表示当前目录就是代码目录（默认值） | `.` |
 | `max_tokens` | 单次回复最大 token 数 | `8192` |
 | `temperature` | 生成温度 (0-2) | `0.7` |
+| `llm_connect_timeout_seconds` | LLM 连接超时（秒） | `10` |
+| `llm_request_timeout_seconds` | 每次 LLM 请求总超时（秒） | `180` |
+| `llm_max_attempts` | 网络错误、429、5xx 的最大尝试次数（1–10） | `3` |
 
 ### 环境变量
 
@@ -367,11 +372,16 @@ export MYOPC_TEAM_ROOT=".myopc_agent"
 export MYOPC_CODE_ROOT="."
 export MYOPC_MAX_TOKENS="8192"
 export MYOPC_TEMPERATURE="0.7"
+export MYOPC_LLM_CONNECT_TIMEOUT_SECONDS="10"
+export MYOPC_LLM_REQUEST_TIMEOUT_SECONDS="180"
+export MYOPC_LLM_MAX_ATTEMPTS="3"
 ```
 
 优先级：**环境变量** > 当前目录 `myopc.json` > `.myopc_agent/myopc.json` > 全局 `~/.myopc/myopc.json`（默认使用全局配置）
 
 包含 API Key 的任一配置文件都必须使用 `0600` 权限，且其所在目录必须使用 `0700` 权限。
+
+LLM 请求仅对网络错误、HTTP 429 和 5xx 进行指数退避重试，并遵循最长 30 秒的 `Retry-After`；其他 4xx 立即失败。缺失 `choices`、畸形工具参数、空工具标识及空成功响应都会返回明确错误。Brain 和每个角色最多执行 30 轮工具调用，不会静默截断对话历史。
 
 ### 使用其他 LLM
 

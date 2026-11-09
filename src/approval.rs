@@ -82,10 +82,11 @@ impl ApprovalRequest {
 
 impl ExecutionApproval for CliExecutionApproval {
     fn approve(&self, request: &ApprovalRequest) -> bool {
+        let prompt = ui::prompt_session();
         println!("{}", "Execution approval required".bold().yellow());
         println!("{}", request.redacted_details());
         println!("Only this execution is covered. Press Enter or anything except y/yes to deny.");
-        let answer = ui::prompt_user_answer();
+        let answer = prompt.answer();
         matches!(answer.trim().to_lowercase().as_str(), "y" | "yes")
     }
 }

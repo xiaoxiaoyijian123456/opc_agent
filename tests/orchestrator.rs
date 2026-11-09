@@ -81,6 +81,9 @@ fn harness(
         code_root: Some(dir.join("code").to_string_lossy().into_owned()),
         max_tokens: 8192,
         temperature: 0.7,
+        llm_connect_timeout_seconds: 10,
+        llm_request_timeout_seconds: 180,
+        llm_max_attempts: 3,
     };
     let llm = Arc::new(MockLlm {
         responses: Arc::new(Mutex::new(VecDeque::from(responses))),
@@ -91,6 +94,7 @@ fn harness(
         IdentityEngine::new(&team_root),
         team_root.join("workspace"),
         llm,
+        myopc::notification::NotificationQueue::default(),
     );
     let store = TaskStore::open(&team_root).unwrap();
     let orchestrator = Orchestrator::new(
@@ -99,6 +103,7 @@ fn harness(
         Arc::new(ScriptedApproval {
             decisions: Mutex::new(VecDeque::from(decisions)),
         }),
+        myopc::notification::NotificationQueue::default(),
     );
     (orchestrator, store)
 }

@@ -1,21 +1,14 @@
+mod response;
+mod retry;
+
+pub use response::{parse_anthropic_response, parse_openai_response, validate_tool_call};
+
 use crate::config::Config;
 use crate::tools::{to_anthropic_tools, to_openai_tools, ToolDef};
 use async_trait::async_trait;
+use retry::{is_network_error, is_retriable_status, retry_delay};
 use serde_json::{json, Value};
 use std::time::Duration;
-
-/// LLM 请求最大重试次数（网络错误 / 429 / 5xx 时重试，指数退避 1s/2s/4s）
-const LLM_MAX_ATTEMPTS: u32 = 3;
-
-fn is_retriable_status(status: reqwest::StatusCode) -> bool {
-    let code = status.as_u16();
-    code == 429 || (500..=599).contains(&code)
-}
-
-async fn retry_delay(attempt: u32) {
-    let secs = 1u64 << (attempt - 1);
-    tokio::time::sleep(Duration::from_secs(secs)).await;
-}
 
 #[async_trait]
 pub trait LlmBackend: Send + Sync {
@@ -56,9 +49,27 @@ pub struct HttpLlm {
 
 impl HttpLlm {
     pub fn new() -> Self {
-        HttpLlm {
-            client: reqwest::Client::new(),
+        Self::with_timeouts(Duration::from_secs(10), Duration::from_secs(180))
+            .expect("default HTTP timeouts are valid")
+    }
+
+    pub fn from_config(config: &Config) -> Result<Self, String> {
+        Self::with_timeouts(
+            Duration::from_secs(config.llm_connect_timeout_seconds),
+            Duration::from_secs(config.llm_request_timeout_seconds),
+        )
+    }
+
+    pub fn with_timeouts(connect: Duration, request: Duration) -> Result<Self, String> {
+        if connect.is_zero() || request.is_zero() {
+            return Err("LLM timeouts must be greater than zero".into());
         }
+        let client = reqwest::Client::builder()
+            .connect_timeout(connect)
+            .timeout(request)
+            .build()
+            .map_err(|error| format!("Cannot create LLM HTTP client: {error}"))?;
+        Ok(Self { client })
     }
 }
 
@@ -70,21 +81,21 @@ impl Default for HttpLlm {
 
 pub fn openai_messages(messages: &[Msg]) -> Vec<Value> {
     let mut out = Vec::new();
-    for m in messages {
-        match m {
-            Msg::System(s) => out.push(json!({ "role": "system", "content": s })),
-            Msg::User(s) => out.push(json!({ "role": "user", "content": s })),
-            Msg::Assistant(s) => out.push(json!({ "role": "assistant", "content": s })),
+    for message in messages {
+        match message {
+            Msg::System(text) => out.push(json!({ "role": "system", "content": text })),
+            Msg::User(text) => out.push(json!({ "role": "user", "content": text })),
+            Msg::Assistant(text) => out.push(json!({ "role": "assistant", "content": text })),
             Msg::AssistantToolCalls(calls) => {
                 let calls: Vec<Value> = calls
                     .iter()
-                    .map(|c| {
+                    .map(|call| {
                         json!({
-                            "id": c.id,
+                            "id": call.id,
                             "type": "function",
                             "function": {
-                                "name": c.name,
-                                "arguments": serde_json::to_string(&c.arguments).unwrap_or_else(|_| "{}".into()),
+                                "name": call.name,
+                                "arguments": serde_json::to_string(&call.arguments).unwrap_or_else(|_| "{}".into()),
                             }
                         })
                     })
@@ -99,35 +110,34 @@ pub fn openai_messages(messages: &[Msg]) -> Vec<Value> {
     out
 }
 
-/// Splits out System messages (used as the Anthropic `system` param).
 pub fn anthropic_split(messages: &[Msg]) -> (String, Vec<Value>) {
     let mut system = String::new();
     let mut out = Vec::new();
-    for m in messages {
-        match m {
-            Msg::System(s) => {
+    for message in messages {
+        match message {
+            Msg::System(text) => {
                 if !system.is_empty() {
                     system.push('\n');
                 }
-                system.push_str(s);
+                system.push_str(text);
             }
-            Msg::User(s) => out.push(json!({
+            Msg::User(text) => out.push(json!({
                 "role": "user",
-                "content": [{ "type": "text", "text": s }]
+                "content": [{ "type": "text", "text": text }]
             })),
-            Msg::Assistant(s) => out.push(json!({
+            Msg::Assistant(text) => out.push(json!({
                 "role": "assistant",
-                "content": [{ "type": "text", "text": s }]
+                "content": [{ "type": "text", "text": text }]
             })),
             Msg::AssistantToolCalls(calls) => {
                 let content: Vec<Value> = calls
                     .iter()
-                    .map(|c| {
+                    .map(|call| {
                         json!({
                             "type": "tool_use",
-                            "id": c.id,
-                            "name": c.name,
-                            "input": c.arguments,
+                            "id": call.id,
+                            "name": call.name,
+                            "input": call.arguments,
                         })
                     })
                     .collect();
@@ -142,56 +152,18 @@ pub fn anthropic_split(messages: &[Msg]) -> (String, Vec<Value>) {
     (system, out)
 }
 
-pub fn parse_openai_response(body: &Value) -> LlmResponse {
-    let msg = &body["choices"][0]["message"];
-    let text = msg["content"].as_str().unwrap_or("").to_string();
-    let mut tool_calls = Vec::new();
-    if let Some(arr) = msg["tool_calls"].as_array() {
-        for tc in arr {
-            let arguments: Value =
-                serde_json::from_str(tc["function"]["arguments"].as_str().unwrap_or("{}"))
-                    .unwrap_or(Value::Null);
-            tool_calls.push(ToolCallMsg {
-                id: tc["id"].as_str().unwrap_or("").to_string(),
-                name: tc["function"]["name"].as_str().unwrap_or("").to_string(),
-                arguments,
-            });
-        }
-    }
-    LlmResponse { text, tool_calls }
-}
-
-pub fn parse_anthropic_response(body: &Value) -> LlmResponse {
-    let mut text = String::new();
-    let mut tool_calls = Vec::new();
-    if let Some(content) = body["content"].as_array() {
-        for block in content {
-            match block["type"].as_str() {
-                Some("text") => text.push_str(block["text"].as_str().unwrap_or("")),
-                Some("tool_use") => tool_calls.push(ToolCallMsg {
-                    id: block["id"].as_str().unwrap_or("").to_string(),
-                    name: block["name"].as_str().unwrap_or("").to_string(),
-                    arguments: block["input"].clone(),
-                }),
-                _ => {}
-            }
-        }
-    }
-    LlmResponse { text, tool_calls }
-}
-
 #[async_trait]
 impl LlmBackend for HttpLlm {
     async fn complete(
         &self,
         messages: &[Msg],
         tools: &[ToolDef],
-        cfg: &Config,
+        config: &Config,
     ) -> Result<LlmResponse, String> {
-        if cfg.provider == "anthropic" {
-            self.complete_anthropic(messages, tools, cfg).await
+        if config.provider == "anthropic" {
+            self.complete_anthropic(messages, tools, config).await
         } else {
-            self.complete_openai(messages, tools, cfg).await
+            self.complete_openai(messages, tools, config).await
         }
     }
 }
@@ -201,130 +173,127 @@ impl HttpLlm {
         &self,
         messages: &[Msg],
         tools: &[ToolDef],
-        cfg: &Config,
+        config: &Config,
     ) -> Result<LlmResponse, String> {
-        let url = format!("{}/chat/completions", cfg.base_url.trim_end_matches('/'));
-        let mut body = json!({
-            "model": cfg.default_model,
+        let url = format!("{}/chat/completions", config.base_url.trim_end_matches('/'));
+        let body = json!({
+            "model": config.default_model,
             "messages": openai_messages(messages),
-            "max_tokens": cfg.max_tokens,
-            "temperature": cfg.temperature,
+            "max_tokens": config.max_tokens,
+            "temperature": config.temperature,
+            "tools": to_openai_tools(tools),
         });
-        body["tools"] = Value::Array(to_openai_tools(tools));
-
-        let mut attempt: u32 = 1;
-        loop {
-            let req = self
+        let attempts = config.llm_max_attempts.max(1);
+        for attempt in 1..=attempts {
+            let response = self
                 .client
                 .post(&url)
-                .header("Authorization", format!("Bearer {}", cfg.api_key))
-                .json(&body);
-            match req.try_clone().unwrap_or(req).send().await {
-                Ok(resp) => {
-                    let status = resp.status();
-                    let text = resp
-                        .text()
-                        .await
-                        .map_err(|e| format!("OpenAI read body failed: {e}"))?;
-                    if status.is_success() {
-                        let parsed: Value = serde_json::from_str(&text)
-                            .map_err(|e| format!("OpenAI parse failed: {e}"))?;
-                        return Ok(parse_openai_response(&parsed));
-                    }
-                    if is_retriable_status(status) && attempt < LLM_MAX_ATTEMPTS {
-                        eprintln!(
-                            "  ⚠ OpenAI 返回 {status}，{} 秒后重试 (第 {} 次)",
-                            1u64 << (attempt - 1),
-                            attempt
-                        );
-                        retry_delay(attempt).await;
-                        attempt += 1;
+                .header("Authorization", format!("Bearer {}", config.api_key))
+                .timeout(Duration::from_secs(config.llm_request_timeout_seconds))
+                .json(&body)
+                .send()
+                .await;
+            let response = match response {
+                Ok(response) => response,
+                Err(error) => {
+                    if is_network_error(&error) && attempt < attempts {
+                        tokio::time::sleep(retry_delay(attempt, &Default::default())).await;
                         continue;
                     }
-                    return Err(format!("OpenAI error {status}: {text}"));
+                    return Err(config.redact(&format!("OpenAI request failed: {error}")));
                 }
-                Err(e) => {
-                    if attempt < LLM_MAX_ATTEMPTS {
-                        eprintln!(
-                            "  ⚠ OpenAI 请求失败：{e}，{} 秒后重试 (第 {} 次)",
-                            1u64 << (attempt - 1),
-                            attempt
-                        );
-                        retry_delay(attempt).await;
-                        attempt += 1;
+            };
+            let status = response.status();
+            let headers = response.headers().clone();
+            let text = match response.text().await {
+                Ok(text) => text,
+                Err(error) => {
+                    if is_network_error(&error) && attempt < attempts {
+                        tokio::time::sleep(retry_delay(attempt, &headers)).await;
                         continue;
                     }
-                    return Err(format!("OpenAI request failed: {e}"));
+                    return Err(config.redact(&format!("OpenAI read body failed: {error}")));
                 }
+            };
+            if status.is_success() {
+                let parsed: Value = serde_json::from_str(&text)
+                    .map_err(|error| format!("OpenAI parse failed: {error}"))?;
+                return parse_openai_response(&parsed)
+                    .map_err(|error| format!("OpenAI invalid response: {error}"));
             }
+            if is_retriable_status(status) && attempt < attempts {
+                tokio::time::sleep(retry_delay(attempt, &headers)).await;
+                continue;
+            }
+            return Err(config.redact(&format!("OpenAI error {status}: {text}")));
         }
+        Err("OpenAI request exhausted its retry policy".into())
     }
 
     async fn complete_anthropic(
         &self,
         messages: &[Msg],
         tools: &[ToolDef],
-        cfg: &Config,
+        config: &Config,
     ) -> Result<LlmResponse, String> {
-        let (system, msgs) = anthropic_split(messages);
+        let (system, messages) = anthropic_split(messages);
+        let url = format!("{}/messages", config.base_url.trim_end_matches('/'));
         let mut body = json!({
-            "model": cfg.default_model,
-            "messages": msgs,
-            "max_tokens": cfg.max_tokens,
-            "temperature": cfg.temperature,
+            "model": config.default_model,
+            "messages": messages,
+            "max_tokens": config.max_tokens,
+            "temperature": config.temperature,
+            "tools": to_anthropic_tools(tools),
         });
         if !system.is_empty() {
             body["system"] = Value::String(system);
         }
-        body["tools"] = Value::Array(to_anthropic_tools(tools));
-
-        let mut attempt: u32 = 1;
-        loop {
-            let req = self
+        let attempts = config.llm_max_attempts.max(1);
+        for attempt in 1..=attempts {
+            let response = self
                 .client
-                .post("https://api.anthropic.com/v1/messages")
-                .header("x-api-key", &cfg.api_key)
+                .post(&url)
+                .header("x-api-key", &config.api_key)
                 .header("anthropic-version", "2023-06-01")
                 .header("content-type", "application/json")
-                .json(&body);
-            match req.try_clone().unwrap_or(req).send().await {
-                Ok(resp) => {
-                    let status = resp.status();
-                    let text = resp
-                        .text()
-                        .await
-                        .map_err(|e| format!("Anthropic read body failed: {e}"))?;
-                    if status.is_success() {
-                        let parsed: Value = serde_json::from_str(&text)
-                            .map_err(|e| format!("Anthropic parse failed: {e}"))?;
-                        return Ok(parse_anthropic_response(&parsed));
-                    }
-                    if is_retriable_status(status) && attempt < LLM_MAX_ATTEMPTS {
-                        eprintln!(
-                            "  ⚠ Anthropic 返回 {status}，{} 秒后重试 (第 {} 次)",
-                            1u64 << (attempt - 1),
-                            attempt
-                        );
-                        retry_delay(attempt).await;
-                        attempt += 1;
+                .timeout(Duration::from_secs(config.llm_request_timeout_seconds))
+                .json(&body)
+                .send()
+                .await;
+            let response = match response {
+                Ok(response) => response,
+                Err(error) => {
+                    if is_network_error(&error) && attempt < attempts {
+                        tokio::time::sleep(retry_delay(attempt, &Default::default())).await;
                         continue;
                     }
-                    return Err(format!("Anthropic error {status}: {text}"));
+                    return Err(config.redact(&format!("Anthropic request failed: {error}")));
                 }
-                Err(e) => {
-                    if attempt < LLM_MAX_ATTEMPTS {
-                        eprintln!(
-                            "  ⚠ Anthropic 请求失败：{e}，{} 秒后重试 (第 {} 次)",
-                            1u64 << (attempt - 1),
-                            attempt
-                        );
-                        retry_delay(attempt).await;
-                        attempt += 1;
+            };
+            let status = response.status();
+            let headers = response.headers().clone();
+            let text = match response.text().await {
+                Ok(text) => text,
+                Err(error) => {
+                    if is_network_error(&error) && attempt < attempts {
+                        tokio::time::sleep(retry_delay(attempt, &headers)).await;
                         continue;
                     }
-                    return Err(format!("Anthropic request failed: {e}"));
+                    return Err(config.redact(&format!("Anthropic read body failed: {error}")));
                 }
+            };
+            if status.is_success() {
+                let parsed: Value = serde_json::from_str(&text)
+                    .map_err(|error| format!("Anthropic parse failed: {error}"))?;
+                return parse_anthropic_response(&parsed)
+                    .map_err(|error| format!("Anthropic invalid response: {error}"));
             }
+            if is_retriable_status(status) && attempt < attempts {
+                tokio::time::sleep(retry_delay(attempt, &headers)).await;
+                continue;
+            }
+            return Err(config.redact(&format!("Anthropic error {status}: {text}")));
         }
+        Err("Anthropic request exhausted its retry policy".into())
     }
 }

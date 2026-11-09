@@ -6,6 +6,7 @@ use crate::config::{team_root_path, validate_config, Config};
 use crate::identity::IdentityEngine;
 use crate::instance_lock::InstanceLock;
 use crate::llm::{HttpLlm, LlmBackend};
+use crate::notification::NotificationQueue;
 use crate::orchestrator::{CliPrdApproval, Orchestrator};
 use crate::process::{ProcessExecutor, ProcessRequest, MAX_TIMEOUT, SHELL_TIMEOUT};
 use crate::skill_loader::SkillLoader;
@@ -30,6 +31,7 @@ pub struct MYOPCApp {
     approval: ApprovalService,
     process: ProcessExecutor,
     code_root: PathBuf,
+    notifications: NotificationQueue,
     _instance_lock: Arc<InstanceLock>,
 }
 
@@ -52,6 +54,7 @@ impl MYOPCApp {
         }
         let bus = Bus::new(&root);
         let identity = IdentityEngine::new(&root);
+        let notifications = NotificationQueue::default();
         let approval = ApprovalService::cli();
         let process = ProcessExecutor::new(&root.join("logs"))?;
         let skills = SkillLoader::new(
@@ -61,7 +64,7 @@ impl MYOPCApp {
             config.redactions(),
         )?;
         let all_tools = tools::merge_tools(tools::tool_defs(), skills.scan());
-        let llm: Arc<dyn LlmBackend> = Arc::new(HttpLlm::new());
+        let llm: Arc<dyn LlmBackend> = Arc::new(HttpLlm::from_config(&config)?);
         let brain = Brain::new(
             config.clone(),
             llm.clone(),
@@ -74,6 +77,7 @@ impl MYOPCApp {
             identity.clone(),
             workspace,
             llm.clone(),
+            notifications.clone(),
         );
         let code_root = normalize_path(&PathBuf::from(
             config.code_root.clone().unwrap_or_else(|| ".".into()),
@@ -86,6 +90,7 @@ impl MYOPCApp {
             store.clone(),
             runner,
             Arc::new(CliPrdApproval::new(config.redactions())),
+            notifications.clone(),
         ));
 
         let errors = validate_config(&config);
@@ -119,6 +124,7 @@ impl MYOPCApp {
             approval,
             process,
             code_root,
+            notifications,
             _instance_lock: instance_lock,
         })
     }
@@ -168,11 +174,12 @@ impl MYOPCApp {
                             .collect()
                     })
                     .unwrap_or_default();
+                let prompt = ui::prompt_session();
                 ui::print_deepthink_question("brain", &question);
                 if options.is_empty() {
-                    ui::prompt_user_answer()
+                    prompt.answer()
                 } else {
-                    ui::prompt_user_select(&options)
+                    prompt.select(&options)
                 }
             }
 
@@ -198,7 +205,8 @@ impl MYOPCApp {
                 let skill_name = &name["skill_".len()..];
                 let result = self.skills.execute(skill_name, args);
                 let preview: String = result.chars().take(120).collect();
-                println!("  {} Skill {}: {}", "⚡".cyan(), skill_name, preview);
+                self.notifications
+                    .push(format!("⚡ Skill {skill_name}: {preview}"));
                 result
             }
 
@@ -229,12 +237,9 @@ impl MYOPCApp {
         };
         match self.process.execute(approved) {
             Ok(outcome) => {
-                ui::print_bash_output(
-                    &outcome.stdout_summary(),
-                    &outcome.stderr_summary(),
-                    if outcome.success() { 0 } else { 1 },
-                );
-                outcome.llm_summary()
+                let summary = outcome.llm_summary();
+                self.notifications.push(summary.clone());
+                summary
             }
             Err(error) => format!("ERROR: {error}"),
         }
@@ -394,11 +399,12 @@ impl MYOPCApp {
     }
 
     async fn uninstall(&self) {
+        let prompt = ui::prompt_session();
         println!("{}", "⚠ Uninstall MYOPC".bold().red());
         println!("This will:");
         println!("  1. Remove ~/.myopc/ config directory");
         println!("  (binary: run `cargo uninstall myopc` or delete the binary)");
-        let answer = ui::prompt_user_answer();
+        let answer = prompt.answer();
         if answer.trim().to_lowercase() != "y" {
             println!("Cancelled.");
             return;
@@ -416,15 +422,20 @@ impl MYOPCApp {
 
     pub async fn chat(&self, user_input: &str) {
         if self.config.api_key.is_empty() {
-            ui::print_error("No api_key configured. Edit myopc.json or set MYOPC_API_KEY.");
+            self.notifications
+                .push("No api_key configured. Edit myopc.json or set MYOPC_API_KEY.");
             return;
         }
         let executor: Arc<dyn ToolExecutor> = Arc::new(self.clone());
         let user_input = self.config.redact(user_input);
         match self.brain.lock().await.chat(&user_input, executor).await {
-            Ok(r) => println!("{}", self.config.redact(&r)),
-            Err(e) => ui::print_error(&format!("Error: {e}")),
+            Ok(response) => self.notifications.push(self.config.redact(&response)),
+            Err(error) => self.notifications.push(format!("Error: {error}")),
         }
+    }
+
+    pub fn drain_notifications(&self) -> Vec<String> {
+        self.notifications.drain()
     }
 
     pub fn shutdown(&self) {
