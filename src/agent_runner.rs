@@ -239,18 +239,18 @@ impl AgentRunner {
 
         let mut rounds: u32 = 0;
         loop {
-            rounds += 1;
-            if rounds > MAX_TOOL_ROUNDS {
-                return Err(format!(
-                    "Agent {role} exceeded max tool rounds ({MAX_TOOL_ROUNDS}) — likely stuck in a tool loop. Interrupted."
-                ));
-            }
             let resp: LlmResponse = self.llm.complete(&messages, &tools, &self.config).await?;
             if resp.tool_calls.is_empty() {
                 return Ok(RunResult {
                     text: resp.text,
                     files: written_files,
                 });
+            }
+            rounds += 1;
+            if rounds > MAX_TOOL_ROUNDS {
+                return Err(format!(
+                    "Agent {role} exceeded max tool rounds ({MAX_TOOL_ROUNDS}) — likely stuck in a tool loop. Interrupted."
+                ));
             }
             messages.push(Msg::AssistantToolCalls(resp.tool_calls.clone()));
             for tc in resp.tool_calls {

@@ -280,6 +280,53 @@ async fn agent_run_writes_code_and_artifact() {
     std::fs::remove_dir_all(&dir).ok();
 }
 
+#[tokio::test]
+async fn agent_stops_after_thirty_tool_rounds() {
+    let dir = temp_dir("tool-rounds");
+    init_project(&dir);
+    let team_root = dir.join(".myopc_agent");
+    let responses = (0..31)
+        .map(|index| LlmResponse {
+            text: String::new(),
+            tool_calls: vec![ToolCallMsg {
+                id: format!("call-{index}"),
+                name: "write_file".into(),
+                arguments: json!({"path": "round.txt", "content": index.to_string()}),
+            }],
+        })
+        .collect::<VecDeque<_>>();
+    let mut runner = AgentRunner::new(
+        test_config(&team_root),
+        Bus::new(&team_root),
+        IdentityEngine::new(&team_root),
+        team_root.join("workspace"),
+        Arc::new(MockLlm {
+            responses: Arc::new(Mutex::new(responses)),
+        }),
+        myopc::notification::NotificationQueue::default(),
+    );
+    runner.code_root = Some(dir.join("code"));
+    let bus = Bus::new(&team_root);
+    let task = bus.dispatch(
+        "dev",
+        "loop test",
+        "keep calling tools",
+        DispatchOpts {
+            from_role: Some("boss".into()),
+            msg_type: Some("implement".into()),
+            context: None,
+        },
+    );
+
+    let result = runner.run("dev", &task.id).await;
+    assert!(result.contains("max tool rounds (30)"), "{result}");
+    assert_eq!(
+        std::fs::read_to_string(dir.join("code/round.txt")).unwrap(),
+        "29"
+    );
+    std::fs::remove_dir_all(&dir).ok();
+}
+
 #[test]
 fn init_creates_myopc_agent_layout() {
     let dir = temp_dir("init");
