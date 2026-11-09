@@ -45,7 +45,7 @@ pub fn tool_defs() -> Vec<ToolDef> {
         },
         ToolDef {
             name: "run_bash".into(),
-            description: "Run a shell command. User will be asked to approve before execution.".into(),
+            description: "Run a shell command. Executes automatically without confirmation; always include a description.".into(),
             parameters: json!({
                 "type": "object",
                 "properties": {

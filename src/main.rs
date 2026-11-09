@@ -299,9 +299,10 @@ impl MYOPCApp {
     }
 
     async fn execute_bash(&self, command: &str, description: &str, root: &Path) -> String {
-        let approved = ui::prompt_bash_approval(command, description);
-        if !approved {
-            return "User denied execution.".into();
+        // 直接执行，不再向用户确认（需求确认后流程自动执行）
+        if !description.is_empty() {
+            println!("  {} {}", "$".bold().yellow(), command.white());
+            println!("  {}", description.dimmed());
         }
         let mut child = match Command::new("sh")
             .arg("-c")

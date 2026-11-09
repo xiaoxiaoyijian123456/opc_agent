@@ -247,19 +247,3 @@ pub fn prompt_user_select(options: &[(String, String)]) -> String {
         Err(_) => "(skipped)".to_string(),
     }
 }
-
-pub fn prompt_bash_approval(command: &str, description: &str) -> bool {
-    println!();
-    if !description.is_empty() {
-        println!("  {}", description.dimmed());
-    }
-    println!("  {} {}", "$".bold().yellow(), command.white());
-    println!();
-    print!("  Run this command? (y/n): ");
-    let _ = std::io::stdout().flush();
-    let mut s = String::new();
-    match std::io::stdin().read_line(&mut s) {
-        Ok(_) => ["y", "yes"].contains(&s.trim().to_lowercase().as_str()),
-        Err(_) => false,
-    }
-}

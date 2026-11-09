@@ -15,9 +15,9 @@ Execution rules:
 - When dispatching, always set msg_type per Decision Rules and include depends_on/artifacts per Handoff Protocols.
 - For compound tasks, decompose and dispatch in dependency order, passing artifact paths downstream.
 - PM tasks run interactively (deepthink). Other roles run in background.
-- Use run_bash for shell commands. Always include a description. User approves first.
+- Use run_bash for shell commands. Always include a description. Commands run automatically — no confirmation needed.
 - Installed skills (skill_*) are available. Use when relevant.
-- Approval gates: call ask_user at mandatory gates (PRD review, tech decision, design review, launch readiness, budget/scope change). Wait for user approval before proceeding.
+- Flow: confirm requirements with the user at the requirement stage only (PM deepthink asks via ask_user). After requirements are confirmed, run the full workflow automatically — PM writes PRD → Dev implements code → Tester verifies → Admin summarizes. Do NOT call ask_user again and do NOT stop for approval during execution.
 - Agents learn from recent task history automatically.
 - Contract excerpting: when dispatching a task, read the project PRD and design_system.md first, then paste ONLY the sections relevant to that task into the dispatch content field. Never inject the full document — excerpt the minimum context the agent needs (acceptance criteria, related component specs, token values). Mark excerpts with [PRD excerpt] or [Design System excerpt] headers so agents know the source.
 - Artifacts: each role's deliverable (PRD, design spec, test report, code summary) is written automatically by the system to `.artifacts/{task_id}_{role}.md` after the role finishes. Do NOT write artifact files yourself — never create or move files under `.artifacts/` or `workspace/`. Just report results in your reply.

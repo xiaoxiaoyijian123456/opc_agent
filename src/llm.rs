@@ -2,6 +2,20 @@ use crate::config::Config;
 use crate::tools::{to_anthropic_tools, to_openai_tools, ToolDef};
 use async_trait::async_trait;
 use serde_json::{json, Value};
+use std::time::Duration;
+
+/// LLM 请求最大重试次数（网络错误 / 429 / 5xx 时重试，指数退避 1s/2s/4s）
+const LLM_MAX_ATTEMPTS: u32 = 3;
+
+fn is_retriable_status(status: reqwest::StatusCode) -> bool {
+    let code = status.as_u16();
+    code == 429 || (500..=599).contains(&code)
+}
+
+async fn retry_delay(attempt: u32) {
+    let secs = 1u64 << (attempt - 1);
+    tokio::time::sleep(Duration::from_secs(secs)).await;
+}
 
 #[async_trait]
 pub trait LlmBackend: Send + Sync {
@@ -189,26 +203,44 @@ impl HttpLlm {
         });
         body["tools"] = Value::Array(to_openai_tools(tools));
 
-        let resp = self
-            .client
-            .post(&url)
-            .header("Authorization", format!("Bearer {}", cfg.api_key))
-            .json(&body)
-            .send()
-            .await
-            .map_err(|e| format!("OpenAI request failed: {e}"))?;
-
-        let status = resp.status();
-        let text = resp
-            .text()
-            .await
-            .map_err(|e| format!("OpenAI read body failed: {e}"))?;
-        if !status.is_success() {
-            return Err(format!("OpenAI error {status}: {text}"));
+        let mut attempt: u32 = 1;
+        loop {
+            let req = self
+                .client
+                .post(&url)
+                .header("Authorization", format!("Bearer {}", cfg.api_key))
+                .json(&body);
+            match req.try_clone().unwrap_or(req).send().await {
+                Ok(resp) => {
+                    let status = resp.status();
+                    let text = resp
+                        .text()
+                        .await
+                        .map_err(|e| format!("OpenAI read body failed: {e}"))?;
+                    if status.is_success() {
+                        let parsed: Value = serde_json::from_str(&text)
+                            .map_err(|e| format!("OpenAI parse failed: {e}"))?;
+                        return Ok(parse_openai_response(&parsed));
+                    }
+                    if is_retriable_status(status) && attempt < LLM_MAX_ATTEMPTS {
+                        eprintln!("  ⚠ OpenAI 返回 {status}，{} 秒后重试 (第 {} 次)", 1u64 << (attempt - 1), attempt);
+                        retry_delay(attempt).await;
+                        attempt += 1;
+                        continue;
+                    }
+                    return Err(format!("OpenAI error {status}: {text}"));
+                }
+                Err(e) => {
+                    if attempt < LLM_MAX_ATTEMPTS {
+                        eprintln!("  ⚠ OpenAI 请求失败：{e}，{} 秒后重试 (第 {} 次)", 1u64 << (attempt - 1), attempt);
+                        retry_delay(attempt).await;
+                        attempt += 1;
+                        continue;
+                    }
+                    return Err(format!("OpenAI request failed: {e}"));
+                }
+            }
         }
-        let parsed: Value = serde_json::from_str(&text)
-            .map_err(|e| format!("OpenAI parse failed: {e}"))?;
-        Ok(parse_openai_response(&parsed))
     }
 
     async fn complete_anthropic(
@@ -229,27 +261,45 @@ impl HttpLlm {
         }
         body["tools"] = Value::Array(to_anthropic_tools(tools));
 
-        let resp = self
-            .client
-            .post("https://api.anthropic.com/v1/messages")
-            .header("x-api-key", &cfg.api_key)
-            .header("anthropic-version", "2023-06-01")
-            .header("content-type", "application/json")
-            .json(&body)
-            .send()
-            .await
-            .map_err(|e| format!("Anthropic request failed: {e}"))?;
-
-        let status = resp.status();
-        let text = resp
-            .text()
-            .await
-            .map_err(|e| format!("Anthropic read body failed: {e}"))?;
-        if !status.is_success() {
-            return Err(format!("Anthropic error {status}: {text}"));
+        let mut attempt: u32 = 1;
+        loop {
+            let req = self
+                .client
+                .post("https://api.anthropic.com/v1/messages")
+                .header("x-api-key", &cfg.api_key)
+                .header("anthropic-version", "2023-06-01")
+                .header("content-type", "application/json")
+                .json(&body);
+            match req.try_clone().unwrap_or(req).send().await {
+                Ok(resp) => {
+                    let status = resp.status();
+                    let text = resp
+                        .text()
+                        .await
+                        .map_err(|e| format!("Anthropic read body failed: {e}"))?;
+                    if status.is_success() {
+                        let parsed: Value = serde_json::from_str(&text)
+                            .map_err(|e| format!("Anthropic parse failed: {e}"))?;
+                        return Ok(parse_anthropic_response(&parsed));
+                    }
+                    if is_retriable_status(status) && attempt < LLM_MAX_ATTEMPTS {
+                        eprintln!("  ⚠ Anthropic 返回 {status}，{} 秒后重试 (第 {} 次)", 1u64 << (attempt - 1), attempt);
+                        retry_delay(attempt).await;
+                        attempt += 1;
+                        continue;
+                    }
+                    return Err(format!("Anthropic error {status}: {text}"));
+                }
+                Err(e) => {
+                    if attempt < LLM_MAX_ATTEMPTS {
+                        eprintln!("  ⚠ Anthropic 请求失败：{e}，{} 秒后重试 (第 {} 次)", 1u64 << (attempt - 1), attempt);
+                        retry_delay(attempt).await;
+                        attempt += 1;
+                        continue;
+                    }
+                    return Err(format!("Anthropic request failed: {e}"));
+                }
+            }
         }
-        let parsed: Value = serde_json::from_str(&text)
-            .map_err(|e| format!("Anthropic parse failed: {e}"))?;
-        Ok(parse_anthropic_response(&parsed))
     }
 }
