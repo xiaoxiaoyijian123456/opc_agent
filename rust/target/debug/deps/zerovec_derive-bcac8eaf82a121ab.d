@@ -1,0 +1,10 @@
+/Users/steven/opc_agent/rust/target/debug/deps/zerovec_derive-bcac8eaf82a121ab.d: /Users/steven/.cargo/registry/src/mirrors.ustc.edu.cn-38d0e5eb5da2abae/zerovec-derive-0.11.7/src/lib.rs /Users/steven/.cargo/registry/src/mirrors.ustc.edu.cn-38d0e5eb5da2abae/zerovec-derive-0.11.7/src/make_ule.rs /Users/steven/.cargo/registry/src/mirrors.ustc.edu.cn-38d0e5eb5da2abae/zerovec-derive-0.11.7/src/make_varule.rs /Users/steven/.cargo/registry/src/mirrors.ustc.edu.cn-38d0e5eb5da2abae/zerovec-derive-0.11.7/src/ule.rs /Users/steven/.cargo/registry/src/mirrors.ustc.edu.cn-38d0e5eb5da2abae/zerovec-derive-0.11.7/src/utils.rs /Users/steven/.cargo/registry/src/mirrors.ustc.edu.cn-38d0e5eb5da2abae/zerovec-derive-0.11.7/src/varule.rs
+
+/Users/steven/opc_agent/rust/target/debug/deps/libzerovec_derive-bcac8eaf82a121ab.dylib: /Users/steven/.cargo/registry/src/mirrors.ustc.edu.cn-38d0e5eb5da2abae/zerovec-derive-0.11.7/src/lib.rs /Users/steven/.cargo/registry/src/mirrors.ustc.edu.cn-38d0e5eb5da2abae/zerovec-derive-0.11.7/src/make_ule.rs /Users/steven/.cargo/registry/src/mirrors.ustc.edu.cn-38d0e5eb5da2abae/zerovec-derive-0.11.7/src/make_varule.rs /Users/steven/.cargo/registry/src/mirrors.ustc.edu.cn-38d0e5eb5da2abae/zerovec-derive-0.11.7/src/ule.rs /Users/steven/.cargo/registry/src/mirrors.ustc.edu.cn-38d0e5eb5da2abae/zerovec-derive-0.11.7/src/utils.rs /Users/steven/.cargo/registry/src/mirrors.ustc.edu.cn-38d0e5eb5da2abae/zerovec-derive-0.11.7/src/varule.rs
+
+/Users/steven/.cargo/registry/src/mirrors.ustc.edu.cn-38d0e5eb5da2abae/zerovec-derive-0.11.7/src/lib.rs:
+/Users/steven/.cargo/registry/src/mirrors.ustc.edu.cn-38d0e5eb5da2abae/zerovec-derive-0.11.7/src/make_ule.rs:
+/Users/steven/.cargo/registry/src/mirrors.ustc.edu.cn-38d0e5eb5da2abae/zerovec-derive-0.11.7/src/make_varule.rs:
+/Users/steven/.cargo/registry/src/mirrors.ustc.edu.cn-38d0e5eb5da2abae/zerovec-derive-0.11.7/src/ule.rs:
+/Users/steven/.cargo/registry/src/mirrors.ustc.edu.cn-38d0e5eb5da2abae/zerovec-derive-0.11.7/src/utils.rs:
+/Users/steven/.cargo/registry/src/mirrors.ustc.edu.cn-38d0e5eb5da2abae/zerovec-derive-0.11.7/src/varule.rs:

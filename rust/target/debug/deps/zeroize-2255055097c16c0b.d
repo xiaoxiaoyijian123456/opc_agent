@@ -1,0 +1,11 @@
+/Users/steven/opc_agent/rust/target/debug/deps/zeroize-2255055097c16c0b.d: /Users/steven/.cargo/registry/src/mirrors.ustc.edu.cn-38d0e5eb5da2abae/zeroize-1.9.1/src/lib.rs /Users/steven/.cargo/registry/src/mirrors.ustc.edu.cn-38d0e5eb5da2abae/zeroize-1.9.1/src/aarch64.rs /Users/steven/.cargo/registry/src/mirrors.ustc.edu.cn-38d0e5eb5da2abae/zeroize-1.9.1/src/barrier.rs /Users/steven/.cargo/registry/src/mirrors.ustc.edu.cn-38d0e5eb5da2abae/zeroize-1.9.1/src/stack.rs /Users/steven/.cargo/registry/src/mirrors.ustc.edu.cn-38d0e5eb5da2abae/zeroize-1.9.1/src/../README.md
+
+/Users/steven/opc_agent/rust/target/debug/deps/libzeroize-2255055097c16c0b.rlib: /Users/steven/.cargo/registry/src/mirrors.ustc.edu.cn-38d0e5eb5da2abae/zeroize-1.9.1/src/lib.rs /Users/steven/.cargo/registry/src/mirrors.ustc.edu.cn-38d0e5eb5da2abae/zeroize-1.9.1/src/aarch64.rs /Users/steven/.cargo/registry/src/mirrors.ustc.edu.cn-38d0e5eb5da2abae/zeroize-1.9.1/src/barrier.rs /Users/steven/.cargo/registry/src/mirrors.ustc.edu.cn-38d0e5eb5da2abae/zeroize-1.9.1/src/stack.rs /Users/steven/.cargo/registry/src/mirrors.ustc.edu.cn-38d0e5eb5da2abae/zeroize-1.9.1/src/../README.md
+
+/Users/steven/opc_agent/rust/target/debug/deps/libzeroize-2255055097c16c0b.rmeta: /Users/steven/.cargo/registry/src/mirrors.ustc.edu.cn-38d0e5eb5da2abae/zeroize-1.9.1/src/lib.rs /Users/steven/.cargo/registry/src/mirrors.ustc.edu.cn-38d0e5eb5da2abae/zeroize-1.9.1/src/aarch64.rs /Users/steven/.cargo/registry/src/mirrors.ustc.edu.cn-38d0e5eb5da2abae/zeroize-1.9.1/src/barrier.rs /Users/steven/.cargo/registry/src/mirrors.ustc.edu.cn-38d0e5eb5da2abae/zeroize-1.9.1/src/stack.rs /Users/steven/.cargo/registry/src/mirrors.ustc.edu.cn-38d0e5eb5da2abae/zeroize-1.9.1/src/../README.md
+
+/Users/steven/.cargo/registry/src/mirrors.ustc.edu.cn-38d0e5eb5da2abae/zeroize-1.9.1/src/lib.rs:
+/Users/steven/.cargo/registry/src/mirrors.ustc.edu.cn-38d0e5eb5da2abae/zeroize-1.9.1/src/aarch64.rs:
+/Users/steven/.cargo/registry/src/mirrors.ustc.edu.cn-38d0e5eb5da2abae/zeroize-1.9.1/src/barrier.rs:
+/Users/steven/.cargo/registry/src/mirrors.ustc.edu.cn-38d0e5eb5da2abae/zeroize-1.9.1/src/stack.rs:
+/Users/steven/.cargo/registry/src/mirrors.ustc.edu.cn-38d0e5eb5da2abae/zeroize-1.9.1/src/../README.md:

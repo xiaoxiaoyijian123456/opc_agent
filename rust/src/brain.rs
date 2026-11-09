@@ -1,0 +1,139 @@
+use crate::agent_runner::ToolExecutor;
+use crate::config::Config;
+use crate::identity::IdentityEngine;
+use crate::llm::{LlmBackend, LlmResponse, Msg};
+use crate::tools::ToolDef;
+use std::sync::Arc;
+
+const BRAIN_RULES: &str = "
+You are OPC Brain, the central coordinator. Follow the AGENTS.md protocol and Handoff Protocols above.
+
+Execution rules:
+- Chat queries: answer directly, no tools.
+- Action requests: call dispatch_task with correct msg_type, then execute_role_task.
+- Pick the most relevant role per AGENTS.md Decision Rules.
+- When dispatching, always set msg_type per Decision Rules and include depends_on/artifacts per Handoff Protocols.
+- For compound tasks, decompose and dispatch in dependency order, passing artifact paths downstream.
+- PM tasks run interactively (deepthink). Other roles run in background.
+- Use run_bash for shell commands. Always include a description. User approves first.
+- Installed skills (skill_*) are available. Use when relevant.
+- Approval gates: call ask_user at mandatory gates (PRD review, tech decision, design review, launch readiness, budget/scope change). Wait for user approval before proceeding.
+- Agents learn from recent task history automatically.
+- Contract excerpting: when dispatching a task, read the project PRD and design_system.md first, then paste ONLY the sections relevant to that task into the dispatch content field. Never inject the full document — excerpt the minimum context the agent needs (acceptance criteria, related component specs, token values). Mark excerpts with [PRD excerpt] or [Design System excerpt] headers so agents know the source.
+- Project discovery: before creating a project, always call list_projects first. If any existing project's name or keywords overlap with the user's request (e.g. \"贪吃蛇2.0\" matches project with keyword \"贪吃蛇\"), call ask_user with options: 1) Place as sibling folder alongside existing project (pass parent=existing_project_name to create_project), 2) Create as independent new project. If no related project found, proceed with normal location choice.
+- Project creation: call create_project with title and keywords (2-5 terms from user request). Use ask_user with options to let user choose code location (workspace or desktop) unless parent is set. All subsequent agent file writes go to the project code directory.
+- Be concise.";
+
+pub struct Brain {
+    config: Config,
+    llm: Arc<dyn LlmBackend>,
+    identity: Option<IdentityEngine>,
+    pub tools: Vec<ToolDef>,
+    messages: Vec<Msg>,
+    system_prompt_cache: Option<String>,
+}
+
+impl Brain {
+    pub fn new(
+        config: Config,
+        llm: Arc<dyn LlmBackend>,
+        identity: Option<IdentityEngine>,
+        tools: Vec<ToolDef>,
+    ) -> Brain {
+        Brain {
+            config,
+            llm,
+            identity,
+            tools,
+            messages: Vec::new(),
+            system_prompt_cache: None,
+        }
+    }
+
+    pub fn system_prompt(&mut self) -> String {
+        if self.system_prompt_cache.is_none() {
+            let mut parts: Vec<String> = Vec::new();
+            if let Some(identity) = &self.identity {
+                let agents_md = identity.load_agents_md();
+                if !agents_md.is_empty() {
+                    parts.push(agents_md);
+                }
+                let handoff = identity.load_handoff();
+                if !handoff.is_empty() {
+                    parts.push(handoff);
+                }
+                let boss = identity.load_boss_identity();
+                if !boss.is_empty() {
+                    parts.push(boss);
+                }
+            }
+            parts.push(BRAIN_RULES.to_string());
+            if self.config.code_root.is_some() {
+                parts.push(format!(
+                    "Existing project mode: this working directory is the project code root (code_root: {}). Do NOT create a project. Dispatch role tasks directly; every write_file path is relative to this directory.",
+                    self.config.code_root.as_deref().unwrap()
+                ));
+            }
+            self.system_prompt_cache = Some(parts.join("\n"));
+        }
+        self.system_prompt_cache.clone().unwrap_or_default()
+    }
+
+    pub async fn chat(
+        &mut self,
+        user_input: &str,
+        executor: Arc<dyn ToolExecutor>,
+    ) -> Result<String, String> {
+        self.messages.push(Msg::User(user_input.to_string()));
+        if self.config.provider == "anthropic" {
+            return self.chat_anthropic(executor).await;
+        }
+        self.chat_openai(executor).await
+    }
+
+    async fn chat_openai(&mut self, executor: Arc<dyn ToolExecutor>) -> Result<String, String> {
+        loop {
+            let resp: LlmResponse = self.llm.complete(&self.messages, &self.tools, &self.config).await?;
+            if resp.tool_calls.is_empty() {
+                self.messages.push(Msg::Assistant(resp.text.clone()));
+                return Ok(resp.text);
+            }
+            self.messages.push(Msg::AssistantToolCalls(resp.tool_calls.clone()));
+            for tc in resp.tool_calls {
+                let result = executor.execute(&tc.name, &tc.arguments).await;
+                self.messages.push(Msg::ToolResult { id: tc.id, content: result });
+            }
+        }
+    }
+
+    async fn chat_anthropic(&mut self, executor: Arc<dyn ToolExecutor>) -> Result<String, String> {
+        // Mirror TS behavior: tool call history is kept in a local list, only
+        // user/assistant text is persisted across turns.
+        let mut api_messages: Vec<Msg> = self
+            .messages
+            .iter()
+            .filter(|m| matches!(m, Msg::User(_) | Msg::Assistant(_)))
+            .cloned()
+            .collect();
+        loop {
+            let resp: LlmResponse = self.llm.complete(&api_messages, &self.tools, &self.config).await?;
+            if resp.tool_calls.is_empty() {
+                self.messages.push(Msg::Assistant(resp.text.clone()));
+                return Ok(resp.text);
+            }
+            api_messages.push(Msg::AssistantToolCalls(resp.tool_calls.clone()));
+            for tc in resp.tool_calls {
+                let result = executor.execute(&tc.name, &tc.arguments).await;
+                api_messages.push(Msg::ToolResult { id: tc.id, content: result });
+            }
+        }
+    }
+
+    pub fn reset(&mut self) {
+        self.messages.clear();
+    }
+
+    pub fn set_tools(&mut self, tools: Vec<ToolDef>) {
+        self.tools = tools;
+    }
+}

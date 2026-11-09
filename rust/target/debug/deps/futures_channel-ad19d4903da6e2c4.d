@@ -1,0 +1,9 @@
+/Users/steven/opc_agent/rust/target/debug/deps/futures_channel-ad19d4903da6e2c4.d: /Users/steven/.cargo/registry/src/mirrors.ustc.edu.cn-38d0e5eb5da2abae/futures-channel-0.3.34/src/lib.rs /Users/steven/.cargo/registry/src/mirrors.ustc.edu.cn-38d0e5eb5da2abae/futures-channel-0.3.34/src/lock.rs /Users/steven/.cargo/registry/src/mirrors.ustc.edu.cn-38d0e5eb5da2abae/futures-channel-0.3.34/src/mpsc/mod.rs /Users/steven/.cargo/registry/src/mirrors.ustc.edu.cn-38d0e5eb5da2abae/futures-channel-0.3.34/src/mpsc/queue.rs /Users/steven/.cargo/registry/src/mirrors.ustc.edu.cn-38d0e5eb5da2abae/futures-channel-0.3.34/src/oneshot.rs
+
+/Users/steven/opc_agent/rust/target/debug/deps/libfutures_channel-ad19d4903da6e2c4.rmeta: /Users/steven/.cargo/registry/src/mirrors.ustc.edu.cn-38d0e5eb5da2abae/futures-channel-0.3.34/src/lib.rs /Users/steven/.cargo/registry/src/mirrors.ustc.edu.cn-38d0e5eb5da2abae/futures-channel-0.3.34/src/lock.rs /Users/steven/.cargo/registry/src/mirrors.ustc.edu.cn-38d0e5eb5da2abae/futures-channel-0.3.34/src/mpsc/mod.rs /Users/steven/.cargo/registry/src/mirrors.ustc.edu.cn-38d0e5eb5da2abae/futures-channel-0.3.34/src/mpsc/queue.rs /Users/steven/.cargo/registry/src/mirrors.ustc.edu.cn-38d0e5eb5da2abae/futures-channel-0.3.34/src/oneshot.rs
+
+/Users/steven/.cargo/registry/src/mirrors.ustc.edu.cn-38d0e5eb5da2abae/futures-channel-0.3.34/src/lib.rs:
+/Users/steven/.cargo/registry/src/mirrors.ustc.edu.cn-38d0e5eb5da2abae/futures-channel-0.3.34/src/lock.rs:
+/Users/steven/.cargo/registry/src/mirrors.ustc.edu.cn-38d0e5eb5da2abae/futures-channel-0.3.34/src/mpsc/mod.rs:
+/Users/steven/.cargo/registry/src/mirrors.ustc.edu.cn-38d0e5eb5da2abae/futures-channel-0.3.34/src/mpsc/queue.rs:
+/Users/steven/.cargo/registry/src/mirrors.ustc.edu.cn-38d0e5eb5da2abae/futures-channel-0.3.34/src/oneshot.rs:
