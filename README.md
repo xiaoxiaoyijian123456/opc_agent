@@ -125,6 +125,10 @@ my-startup/
     └── memory_center/
 ```
 
+`opc init` 会把 `code_root` 设为 `"."`——无论目录是否为空，**当前目录就是代码所在目录**，所有生成的代码直接写到这里；Brain 不会调用 `create_project`。重复执行不会覆盖任何已有文件。
+
+> 想改用「多项目」布局（代码放到 `workspace/{project}/code`），删除 `opc.json` 里的 `code_root` 字段后重新执行 `opc init` 即可。
+
 ### 配置 API Key
 
 编辑 `.opc_agent/opc.json`：
@@ -348,6 +352,7 @@ my-startup/
 | `base_url` | API 端点（兼容 OpenAI 格式的服务都能用） | `https://api.openai.com/v1` |
 | `default_model` | 模型名称 | `gpt-4o` |
 | `team_root` | 团队根目录（相对启动目录） | `.` |
+| `code_root` | 代码根目录；`"."` 表示当前目录就是代码目录（init 默认值）。留空则使用多项目布局 `workspace/{project}/code` | `.` |
 | `max_tokens` | 单次回复最大 token 数 | `8192` |
 | `temperature` | 生成温度 (0-2) | `0.7` |
 
@@ -359,6 +364,7 @@ export OPC_PROVIDER="openai"
 export OPC_MODEL="gpt-4o"
 export OPC_BASE_URL="https://api.openai.com/v1"
 export OPC_TEAM_ROOT=".opc_agent"
+export OPC_CODE_ROOT="."
 export OPC_MAX_TOKENS="8192"
 export OPC_TEMPERATURE="0.7"
 ```

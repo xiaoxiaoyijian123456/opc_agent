@@ -48,10 +48,18 @@ class OPCApp {
 
     this.skills = new SkillLoader(path.join(root, 'skills'));
     const skillTools = this.skills.scan();
-    const allTools = mergeSkillTools(TOOL_DEFS, skillTools);
+    const baseTools = this.config.codeRoot
+      ? TOOL_DEFS.filter(t => t.name !== 'create_project')
+      : TOOL_DEFS;
+    const allTools = mergeSkillTools(baseTools, skillTools);
 
     this.brain = new Brain(this.config, this.bus, workspace, this.identity, allTools);
     this.runner = new AgentRunner(this.config, this.bus, this.identity, workspace);
+    if (this.config.codeRoot) {
+      const codeRoot = path.resolve(this.config.codeRoot);
+      fs.ensureDirSync(codeRoot);
+      this.runner.codeRoot = codeRoot;
+    }
 
     const errors = validateConfig(this.config);
     const configOk = errors.length === 0;

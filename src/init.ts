@@ -56,6 +56,8 @@ export function initProject(target: string) {
     }
   }
 
+  setCodeRoot(opcJson, '.');
+
   for (const pattern of RUNTIME_DIRS) {
     if (pattern.includes('{role}')) {
       for (const role of ROLES) {
@@ -67,6 +69,7 @@ export function initProject(target: string) {
   }
 
   console.log(`\n${chalk.bold.green(`OPC initialized in ${targetRoot}`)}\n`);
+  console.log(`  ${chalk.dim(`Code root: "." — generated code will be written into this directory`)}\n`);
   if (created.length > 0) {
     for (const f of created) {
       console.log(`  ${chalk.green('+')} ${path.join(TEAM_DIR, f)}`);
@@ -78,6 +81,16 @@ export function initProject(target: string) {
   console.log(`\n${chalk.bold('Next steps:')}`);
   console.log(`  1. Edit ${chalk.cyan(path.join(TEAM_DIR, 'opc.json'))} — set your api_key`);
   console.log(`  2. Run ${chalk.cyan('opc')} to start\n`);
+}
+
+function setCodeRoot(opcJson: string, codeRoot: string) {
+  try {
+    const raw = JSON.parse(fs.readFileSync(opcJson, 'utf-8'));
+    if (raw.code_root == null) {
+      raw.code_root = codeRoot;
+      fs.writeFileSync(opcJson, JSON.stringify(raw, null, 4) + '\n');
+    }
+  } catch {}
 }
 
 function getAllFiles(dir: string): string[] {

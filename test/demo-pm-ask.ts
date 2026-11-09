@@ -202,6 +202,7 @@ async function main() {
     baseUrl: 'http://localhost:0',
     defaultModel: 'mock',
     teamRoot: DEMO_DIR,
+    codeRoot: '',
     maxTokens: 8192,
     temperature: 0.7,
   };

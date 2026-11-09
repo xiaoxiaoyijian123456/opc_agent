@@ -67,6 +67,12 @@ export class Brain {
         if (approvalRules) parts.push(approvalRules);
       }
       parts.push(BRAIN_RULES);
+      if (this.config.codeRoot) {
+        parts.push(
+          `Existing project mode: this working directory is the project code root (code_root: ${this.config.codeRoot}). ` +
+          'Do NOT create a project. Dispatch role tasks directly; every write_file path is relative to this directory.'
+        );
+      }
       this.systemPromptCache = parts.join('\n');
     }
     return this.systemPromptCache;

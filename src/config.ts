@@ -7,6 +7,7 @@ export interface Config {
   baseUrl: string;
   defaultModel: string;
   teamRoot: string;
+  codeRoot: string;
   maxTokens: number;
   temperature: number;
 }
@@ -17,6 +18,7 @@ const DEFAULTS: Config = {
   baseUrl: 'https://api.openai.com/v1',
   defaultModel: 'gpt-4o',
   teamRoot: '.',
+  codeRoot: '',
   maxTokens: 8192,
   temperature: 0.7,
 };
@@ -27,6 +29,7 @@ const ENV_MAP: Record<string, keyof Config> = {
   OPC_MODEL: 'defaultModel',
   OPC_PROVIDER: 'provider',
   OPC_TEAM_ROOT: 'teamRoot',
+  OPC_CODE_ROOT: 'codeRoot',
   OPC_MAX_TOKENS: 'maxTokens',
   OPC_TEMPERATURE: 'temperature',
 };
@@ -41,6 +44,7 @@ function loadJson(filePath: string): Partial<Config> {
       if (raw.base_url) mapped.baseUrl = raw.base_url;
       if (raw.default_model) mapped.defaultModel = raw.default_model;
       if (raw.team_root) mapped.teamRoot = raw.team_root;
+      if (raw.code_root) mapped.codeRoot = raw.code_root;
       if (raw.max_tokens != null) mapped.maxTokens = Number(raw.max_tokens);
       if (raw.temperature != null) mapped.temperature = Number(raw.temperature);
       return mapped;
