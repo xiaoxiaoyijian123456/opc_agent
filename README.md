@@ -12,7 +12,6 @@
 <p align="center">
   <a href="https://www.npmjs.com/package/myopc-cli"><img src="https://img.shields.io/npm/v/myopc-cli?color=blue&label=npm" alt="npm"></a>
   <a href="https://github.com/CroTuyuzhe/opc_agent/blob/main/LICENSE"><img src="https://img.shields.io/badge/license-Apache%202.0-green" alt="license"></a>
-  <img src="https://img.shields.io/badge/node-%3E%3D18-brightgreen" alt="node">
   <img src="https://img.shields.io/badge/LLM-OpenAI%20%7C%20Anthropic-purple" alt="LLM">
 </p>
 
@@ -34,7 +33,7 @@ MYOPC 是一个运行在终端里的 **AI 多智能体协作框架**。你只需
 
 **🔁 真实团队协作模式** — 角色之间通过消息总线异步通信，有交接规范、有审批节点、有质量门禁，不是简单的 prompt chain。
 
-**🔌 可扩展插件系统** — 从 GitHub 一键安装 Skill 插件，支持 Node.js / Python / Bash，让你的团队能力无限延伸。
+**🔌 可扩展插件系统** — 从 GitHub 一键安装 Skill 插件，支持 Python / Bash，让你的团队能力无限延伸。
 
 ---
 
@@ -102,8 +101,6 @@ MYOPC 是一个运行在终端里的 **AI 多智能体协作框架**。你只需
 ```bash
 npm install -g myopc-cli
 ```
-
-> 需要 Node.js 18+
 
 ### 初始化项目
 
@@ -439,7 +436,7 @@ myopc > /skill install https://github.com/user/my-skill
 ```
 skills/my_tool/
 ├── manifest.json      ← 工具描述 + 参数定义
-└── run.js             ← 入口脚本（支持 Node.js / Python / Bash）
+└── run.sh             ← 入口脚本（支持 Python / Bash）
 ```
 
 `manifest.json` 示例：
@@ -449,8 +446,8 @@ skills/my_tool/
     "name": "my_tool",
     "description": "A custom tool that does something useful",
     "version": "0.1.0",
-    "type": "node",
-    "entry": "run.js",
+    "type": "bash",
+    "entry": "run.sh",
     "parameters": {
         "type": "object",
         "properties": {

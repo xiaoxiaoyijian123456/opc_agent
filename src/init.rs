@@ -5,11 +5,12 @@ pub const TEAM_DIR: &str = ".myopc_agent";
 
 const ROLES: [&str; 5] = ["pm", "dev", "ui", "tester", "admin"];
 
-const RUNTIME_DIRS: [&str; 6] = [
+const RUNTIME_DIRS: [&str; 7] = [
     "communication/bus/{role}/inbox",
     "communication/bus/{role}/active",
     "workspace",
     ".artifacts",
+    "skills",
     "memory_center/archive",
     "memory_center/project_history",
 ];

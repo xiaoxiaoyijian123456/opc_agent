@@ -238,7 +238,7 @@ MYOPC_Team/
 
 ### 5.1 Skill 插件系统
 
-在 `skills/` 下创建目录，包含 `manifest.json` + `run.js`，模型自动发现并调用。
+在 `skills/` 下创建目录，包含 `manifest.json` + `run.sh`，模型自动发现并调用。
 从 GitHub 安装: `/skill install <repo_url>`
 
 ### 5.2 记忆进化

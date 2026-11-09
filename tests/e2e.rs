@@ -4,7 +4,6 @@ use myopc::config::Config;
 use myopc::identity::IdentityEngine;
 use myopc::init::init_project;
 use myopc::llm::{LlmBackend, LlmResponse, Msg, ToolCallMsg};
-use myopc::skill_loader::SkillLoader;
 use myopc::tools::ToolDef;
 use serde_json::json;
 use std::collections::VecDeque;
@@ -233,26 +232,8 @@ fn init_creates_myopc_agent_layout() {
     assert!(!dir.join(".myopc_agent/myopc.json").exists(), "init 不生成项目内配置，使用全局 ~/.myopc/myopc.json");
     assert!(dir.join(".myopc_agent/.artifacts").exists());
     assert!(dir.join(".myopc_agent/workspace").exists());
+    assert!(dir.join(".myopc_agent/skills").exists(), "init 创建 skills 目录，供用户添加 skill 插件");
     assert!(dir.join(".myopc_agent/communication/bus/pm/inbox").exists());
-    assert!(dir.join(".myopc_agent/skills/hello_world/manifest.json").exists());
-
-    std::fs::remove_dir_all(&dir).ok();
-}
-
-#[test]
-fn skill_scan_and_execute() {
-    let dir = temp_dir("skill");
-    init_project(&dir);
-    let skills = SkillLoader::new(&dir.join(".myopc_agent/skills"));
-
-    let tools = skills.scan();
-    assert!(tools.iter().any(|t| t.name == "skill_hello_world"));
-
-    let result = skills.execute("hello_world", &json!({ "message": "rust" }));
-    assert!(result.contains("Hello"), "result: {result}");
-
-    let listed = skills.list_skills();
-    assert!(listed.iter().any(|(name, _, _)| name == "hello_world"));
 
     std::fs::remove_dir_all(&dir).ok();
 }

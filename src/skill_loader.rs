@@ -109,14 +109,13 @@ impl SkillLoader {
         let Some(info) = info else {
             return format!("Skill not found: {skill_name}");
         };
-        let entry_file = info.path.join(info.manifest.entry.clone().unwrap_or_else(|| "run.js".into()));
+        let entry_file = info.path.join(info.manifest.entry.clone().unwrap_or_else(|| "run.sh".into()));
         if !entry_file.exists() {
             return format!("Entry not found: {}", entry_file.display());
         }
-        let kind = info.manifest.kind.clone().unwrap_or_else(|| "node".into());
+        let kind = info.manifest.kind.clone().unwrap_or_else(|| "bash".into());
         let cmd = match kind.as_str() {
             "python" => "python3",
-            "node" => "node",
             _ => "bash",
         };
 
