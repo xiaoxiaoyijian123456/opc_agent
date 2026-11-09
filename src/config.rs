@@ -48,9 +48,7 @@ fn load_json(file: &Path) -> Result<Option<RawConfig>, String> {
         Err(error) => return Err(format!("Cannot read config {}: {error}", file.display())),
     };
     let raw: RawConfig = serde_json::from_str(&source)
-        .map(Some)
-        .map_err(|error| format!("Invalid config {}: {error}", file.display()))?
-        .unwrap_or_default();
+        .map_err(|error| format!("Invalid config {}: {error}", file.display()))?;
     if raw.api_key.as_deref().is_some_and(|key| !key.is_empty()) {
         let file_mode = std::fs::metadata(file)
             .map_err(|error| format!("Cannot inspect config {}: {error}", file.display()))?

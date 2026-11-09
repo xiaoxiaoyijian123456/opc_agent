@@ -153,6 +153,7 @@ impl AgentRunner {
         let mut result = match self.run_role(role, &system, &user_msg).await {
             Ok(r) => r,
             Err(error) => {
+                let error = self.config.redact(&error);
                 let error_text = format!("ERROR: {error}");
                 self.write_reflection(role, task_id, task, &error_text)?;
                 return Err(format!("Agent {role} failed: {error}"));
@@ -348,7 +349,7 @@ impl AgentRunner {
         let reflection = serde_json::json!({
             "task_id": task_id,
             "role": role,
-            "title": task.title,
+            "title": self.config.redact(&task.title),
             "type": task.msg_type,
             "success": false,
             "summary": summary,

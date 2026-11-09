@@ -37,7 +37,8 @@ impl MYOPCApp {
     pub fn new(config: Config) -> Result<MYOPCApp, String> {
         let root = team_root_path(&config);
         let workspace = root.join("workspace");
-        std::fs::create_dir_all(&workspace).ok();
+        std::fs::create_dir_all(&workspace)
+            .map_err(|error| format!("Cannot create workspace {workspace:?}: {error}"))?;
         std::fs::set_permissions(&root, std::os::unix::fs::PermissionsExt::from_mode(0o700))
             .map_err(|error| format!("Cannot protect team directory {root:?}: {error}"))?;
 
@@ -178,6 +179,9 @@ impl MYOPCApp {
             "run_bash" => {
                 let command = args["command"].as_str().unwrap_or("");
                 let description = args["description"].as_str().unwrap_or("");
+                if description.trim().is_empty() {
+                    return "ERROR: run_bash requires a non-empty description".into();
+                }
                 let timeout = match args.get("timeout_seconds") {
                     None => SHELL_TIMEOUT,
                     Some(value) => match value.as_u64().map(Duration::from_secs) {

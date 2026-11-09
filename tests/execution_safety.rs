@@ -136,13 +136,18 @@ fn large_stdout_and_stderr_are_read_concurrently() {
 #[test]
 fn timeout_kills_the_process_and_preserves_a_log() {
     let dir = temp_dir("timeout");
+    let marker = dir.join("survived");
+    let command = format!(
+        "(sleep 0.3; printf survived > {}) & sleep 5",
+        marker.display()
+    );
     let executor = ProcessExecutor::new(&dir.join("logs")).unwrap();
     let started = Instant::now();
     let outcome = executor
         .execute(authorize(
             &approval(true),
-            "sleep 5",
-            shell("sleep 5", &dir, Duration::from_millis(80)),
+            &command,
+            shell(&command, &dir, Duration::from_millis(80)),
         ))
         .unwrap();
 
@@ -150,6 +155,33 @@ fn timeout_kills_the_process_and_preserves_a_log() {
     assert!(!outcome.success());
     assert!(outcome.llm_summary().contains("timed out"));
     assert!(outcome.log_path().is_file());
+    std::thread::sleep(Duration::from_millis(450));
+    assert!(
+        !marker.exists(),
+        "a descendant escaped process-group cleanup"
+    );
+    std::fs::remove_dir_all(dir).ok();
+}
+
+#[test]
+fn kill_all_terminates_a_running_process() {
+    let dir = temp_dir("kill-all");
+    let executor = ProcessExecutor::new(&dir.join("logs")).unwrap();
+    let running = executor.clone();
+    let worker_dir = dir.clone();
+    let worker = std::thread::spawn(move || {
+        running.execute(authorize(
+            &approval(true),
+            "sleep 5",
+            shell("sleep 5", &worker_dir, Duration::from_secs(10)),
+        ))
+    });
+    std::thread::sleep(Duration::from_millis(100));
+    executor.kill_all();
+    let outcome = worker.join().unwrap().unwrap();
+
+    assert!(!outcome.success());
+    assert!(outcome.llm_summary().contains("terminated"));
     std::fs::remove_dir_all(dir).ok();
 }
 
