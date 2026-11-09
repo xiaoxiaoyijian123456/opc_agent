@@ -77,26 +77,6 @@ pub fn tool_defs() -> Vec<ToolDef> {
             }),
         },
         ToolDef {
-            name: "list_projects".into(),
-            description: "List all existing projects in workspace. Call before create_project to check for related/duplicate projects.".into(),
-            parameters: json!({ "type": "object", "properties": {} }),
-        },
-        ToolDef {
-            name: "create_project".into(),
-            description: "Create a new project. Call list_projects first to check for related projects.".into(),
-            parameters: json!({
-                "type": "object",
-                "properties": {
-                    "name": { "type": "string", "description": "Project name (directory name, lowercase, no spaces)" },
-                    "location": { "type": "string", "enum": ["workspace", "desktop"], "description": "Where to create code directory" },
-                    "parent": { "type": "string", "description": "Name of existing parent project for sibling placement" },
-                    "title": { "type": "string", "description": "Human-readable project title" },
-                    "keywords": { "type": "array", "items": { "type": "string" }, "description": "Keywords for future project matching" }
-                },
-                "required": ["name", "location"]
-            }),
-        },
-        ToolDef {
             name: "ask_user".into(),
             description: "Ask the user a question or request approval. Provide options for common choices.".into(),
             parameters: json!({

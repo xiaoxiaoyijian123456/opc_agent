@@ -132,12 +132,7 @@ impl MYOPCApp {
 
         self.skills = SkillLoader::new(&root.join("skills"));
         let skill_tools = self.skills.scan();
-        let base = if self.config.code_root.is_some() {
-            tools::tool_defs().into_iter().filter(|t| t.name != "create_project").collect()
-        } else {
-            tools::tool_defs()
-        };
-        let all_tools = tools::merge_tools(base, skill_tools);
+        let all_tools = tools::merge_tools(tools::tool_defs(), skill_tools);
 
         let llm: Arc<dyn LlmBackend> = Arc::new(HttpLlm::new());
         self.brain = Arc::new(Mutex::new(Brain::new(
@@ -154,11 +149,9 @@ impl MYOPCApp {
             workspace,
             llm,
         );
-        if let Some(cr) = &self.config.code_root {
-            let cr = normalize_path(&PathBuf::from(cr));
-            std::fs::create_dir_all(&cr).ok();
-            runner.code_root = Some(cr);
-        }
+        let cr = normalize_path(&PathBuf::from(self.config.code_root.clone().unwrap_or_else(|| ".".into())));
+        std::fs::create_dir_all(&cr).ok();
+        runner.code_root = Some(cr);
         self.runner = Arc::new(Mutex::new(runner));
 
         let errors = validate_config(&self.config);
@@ -263,19 +256,6 @@ impl MYOPCApp {
                     self.run_in_background(&role, &task_id);
                     format!("Task {task_id} started in background for {role}. You'll be notified when done.")
                 }
-            }
-
-            "list_projects" => {
-                let registry = self.load_registry(&root);
-                if registry.is_empty() {
-                    "No existing projects.".into()
-                } else {
-                    serde_json::to_string(&registry).unwrap_or_default()
-                }
-            }
-
-            "create_project" => {
-                self.create_project(&root, args).await
             }
 
             "ask_user" => {

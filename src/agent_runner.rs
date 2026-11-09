@@ -34,7 +34,6 @@ pub struct AgentRunner {
     identity: IdentityEngine,
     workspace: PathBuf,
     llm: Arc<dyn LlmBackend>,
-    pub project_id: Option<String>,
     pub code_root: Option<PathBuf>,
 }
 
@@ -75,7 +74,6 @@ impl AgentRunner {
             identity,
             workspace,
             llm,
-            project_id: None,
             code_root: None,
         }
     }
@@ -90,10 +88,7 @@ impl AgentRunner {
         };
 
         let team_root = self.team_root();
-        let artifact_dir = match &self.project_id {
-            Some(pid) => team_root.join(".artifacts").join(pid),
-            None => team_root.join(".artifacts"),
-        };
+        let artifact_dir = team_root.join(".artifacts");
         let artifact_path = artifact_dir.join(format!("{task_id}_{role}.md"));
         let artifact_rel = artifact_path
             .strip_prefix(&std::env::current_dir().unwrap_or_default())
@@ -236,13 +231,9 @@ impl AgentRunner {
     }
 
     pub fn resolve_write_target(&self, raw: &str) -> Option<(PathBuf, String)> {
-        let project_dir = match &self.project_id {
-            Some(pid) => self.workspace.join(pid),
-            None => self.workspace.clone(),
-        };
         let code_base = match &self.code_root {
             Some(cr) => cr.clone(),
-            None => project_dir.join("code"),
+            None => self.workspace.join("code"),
         };
 
         let mut rel = raw.replace('\\', "/").trim().to_string();
@@ -252,20 +243,10 @@ impl AgentRunner {
         if let Some(s) = rel.strip_prefix("workspace/") {
             rel = s.to_string();
         }
-        if let Some(pid) = &self.project_id {
-            let prefix = format!("{pid}/");
-            if let Some(s) = rel.strip_prefix(&prefix) {
-                rel = s.to_string();
-            }
-        }
 
         let mut base = code_base;
         if rel.starts_with("artifacts/") {
-            let team_root = self.team_root();
-            base = match &self.project_id {
-                Some(pid) => team_root.join(".artifacts").join(pid),
-                None => team_root.join(".artifacts"),
-            };
+            base = self.team_root().join(".artifacts");
             rel = rel["artifacts/".len()..].to_string();
         } else if rel.starts_with("code/") {
             rel = rel["code/".len()..].to_string();
@@ -319,7 +300,7 @@ fn agent_tool_def(name: &str) -> ToolDef {
     match name {
         "write_file" => ToolDef {
             name: "write_file".into(),
-            description: "Write a file under the project code root. Path must be relative to the code root (e.g. \"cmd/server/main.go\"), without any \"workspace/\", project name, or leading \"/\" prefix.".into(),
+            description: "Write a file under the project code root. Path must be relative to the code root (e.g. \"cmd/server/main.go\"), without any \"workspace/\", or leading \"/\" prefix.".into(),
             parameters: serde_json::json!({
                 "type": "object",
                 "properties": {
