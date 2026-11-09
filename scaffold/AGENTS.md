@@ -206,6 +206,8 @@ MYOPC_Team/
     └── {skill_name}/manifest.json
 ```
 
+**代码位置**：所有代码/文件写入当前目录（code root）。写文件路径必须直接相对于当前目录（如 `cmd/server/main.go`），**不要创建项目名子目录**（如 `gin-scaffold/`），也不要加 `workspace/` 前缀。
+
 ### 4.2 任务 JSON 格式
 
 ```json

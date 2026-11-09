@@ -27,6 +27,9 @@ pub fn has_sync_tool(role: &str) -> bool {
     role_tools(role).contains(&"ask_user")
 }
 
+/// 单个角色的最大工具调用轮数，防止 LLM 陷入反复调用工具的死循环
+const MAX_TOOL_ROUNDS: u32 = 30;
+
 #[derive(Clone)]
 pub struct AgentRunner {
     config: Config,
@@ -168,7 +171,14 @@ impl AgentRunner {
             .map(|&n| agent_tool_def(n))
             .collect();
 
+        let mut rounds: u32 = 0;
         loop {
+            rounds += 1;
+            if rounds > MAX_TOOL_ROUNDS {
+                return Err(format!(
+                    "Agent {role} exceeded max tool rounds ({MAX_TOOL_ROUNDS}) — likely stuck in a tool loop. Interrupted."
+                ));
+            }
             let resp: LlmResponse = self.llm.complete(&messages, &tools, &self.config).await?;
             if resp.tool_calls.is_empty() {
                 return Ok(RunResult { text: resp.text, files: written_files });
@@ -300,7 +310,7 @@ fn agent_tool_def(name: &str) -> ToolDef {
     match name {
         "write_file" => ToolDef {
             name: "write_file".into(),
-            description: "Write a file under the project code root. Path must be relative to the code root (e.g. \"cmd/server/main.go\"), without any \"workspace/\", or leading \"/\" prefix.".into(),
+            description: "Write a file at the code root. Path must be relative to the current directory (code root) directly, e.g. \"cmd/server/main.go\". Do NOT create a project-name wrapper folder (like \"gin-scaffold/\"), and do not use \"workspace/\" or leading \"/\" prefixes.".into(),
             parameters: serde_json::json!({
                 "type": "object",
                 "properties": {
