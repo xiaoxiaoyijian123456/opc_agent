@@ -223,16 +223,11 @@ fn init_creates_myopc_agent_layout() {
 
     assert!(dir.join(".myopc_agent").exists());
     assert!(dir.join(".myopc_agent/AGENTS.md").exists());
-    assert!(dir.join(".myopc_agent/myopc.json").exists());
+    assert!(!dir.join(".myopc_agent/myopc.json").exists(), "init 不生成项目内配置，使用全局 ~/.myopc/myopc.json");
     assert!(dir.join(".myopc_agent/.artifacts").exists());
     assert!(dir.join(".myopc_agent/workspace").exists());
     assert!(dir.join(".myopc_agent/communication/bus/pm/inbox").exists());
     assert!(dir.join(".myopc_agent/skills/hello_world/manifest.json").exists());
-
-    let opc_json = std::fs::read_to_string(dir.join(".myopc_agent/myopc.json")).unwrap();
-    let v: serde_json::Value = serde_json::from_str(&opc_json).unwrap();
-    assert_eq!(v["code_root"].as_str(), Some("."));
-    assert_eq!(v["team_root"].as_str(), Some(".myopc_agent"));
 
     std::fs::remove_dir_all(&dir).ok();
 }

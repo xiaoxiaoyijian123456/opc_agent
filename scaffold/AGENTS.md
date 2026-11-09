@@ -180,7 +180,7 @@ Boss: "登录页验证码倒计时有 BUG"
 MYOPC_Team/
 ├── AGENTS.md                          ← 本文件，初始化必读
 ├── BOUNDARY.md                        ← 安全红线，所有角色强制遵守
-├── myopc.json                           ← 配置文件
+│                                       （配置使用全局 ~/.myopc/myopc.json，init 不生成）
 │
 ├── communication/bus/                 ← 消息总线
 │   └── {role}/

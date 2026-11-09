@@ -117,7 +117,6 @@ myopc init
 ```
 my-startup/
 └── .myopc_agent/          ← 所有 MYOPC 内部文件
-    ├── myopc.json
     ├── AGENTS.md
     ├── staff/
     ├── communication/
@@ -125,13 +124,13 @@ my-startup/
     └── memory_center/
 ```
 
-`myopc init` 会把 `code_root` 设为 `"."`——无论目录是否为空，**当前目录就是代码所在目录**，所有生成的代码直接写到这里；Brain 不会调用 `create_project`。重复执行不会覆盖任何已有文件。
+`myopc init` 只生成团队目录，**不生成项目内配置文件**——配置统一使用全局 `~/.myopc/myopc.json`（init 不覆盖已有文件）。
 
-> 想改用「多项目」布局（代码放到 `workspace/{project}/code`），删除 `myopc.json` 里的 `code_root` 字段后重新执行 `myopc init` 即可。
+> 想改用「多项目」布局（代码放到 `workspace/{project}/code`），删除全局 `myopc.json` 里的 `code_root` 字段即可。
 
 ### 配置 API Key
 
-编辑 `.myopc_agent/myopc.json`：
+编辑全局配置 `~/.myopc/myopc.json`：
 
 ```json
 {
@@ -150,7 +149,7 @@ my-startup/
 ### 启动
 
 ```bash
-opc
+myopc
 ```
 
 ```
@@ -288,7 +287,6 @@ Brain 在关键节点会暂停，等你确认：
 ```
 my-startup/
 └── .myopc_agent/
-    ├── myopc.json                      ← 配置文件
     ├── AGENTS.md                     ← 团队协议（所有角色自动加载）
     ├── boundary.md                   ← 安全红线
     │
@@ -331,7 +329,7 @@ my-startup/
 
 ### myopc.json
 
-位于 `.myopc_agent/myopc.json`：
+全局配置位于 `~/.myopc/myopc.json`（`myopc init` 不生成项目内配置）：
 
 ```json
 {
@@ -352,7 +350,7 @@ my-startup/
 | `base_url` | API 端点（兼容 OpenAI 格式的服务都能用） | `https://api.openai.com/v1` |
 | `default_model` | 模型名称 | `gpt-4o` |
 | `team_root` | 团队根目录（相对启动目录） | `.` |
-| `code_root` | 代码根目录；`"."` 表示当前目录就是代码目录（init 默认值）。留空则使用多项目布局 `workspace/{project}/code` | `.` |
+| `code_root` | 代码根目录；`"."` 表示当前目录就是代码目录（默认值）。留空则使用多项目布局 `workspace/{project}/code` | `.` |
 | `max_tokens` | 单次回复最大 token 数 | `8192` |
 | `temperature` | 生成温度 (0-2) | `0.7` |
 
@@ -369,7 +367,7 @@ export MYOPC_MAX_TOKENS="8192"
 export MYOPC_TEMPERATURE="0.7"
 ```
 
-优先级：**环境变量** > 当前目录 `myopc.json` > `.myopc_agent/myopc.json` > `~/.myopc/myopc.json`
+优先级：**环境变量** > 当前目录 `myopc.json` > `.myopc_agent/myopc.json` > 全局 `~/.myopc/myopc.json`（默认使用全局配置）
 
 ### 使用其他 LLM
 
