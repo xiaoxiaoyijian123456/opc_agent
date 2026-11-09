@@ -221,27 +221,32 @@ pub fn prompt_user_answer() -> String {
 }
 
 pub fn prompt_user_select(options: &[(String, String)]) -> String {
+    if options.is_empty() {
+        return prompt_user_answer();
+    }
     println!();
     for (i, (label, _)) in options.iter().enumerate() {
-        println!("    {}: {}", i + 1, label);
+        if i == 0 {
+            println!("    {}: {}（建议，回车默认选中）", i + 1, label);
+        } else {
+            println!("    {}: {}", i + 1, label);
+        }
     }
     println!("    {}: {}", options.len() + 1, "自由输入...");
-    print!("  请选择 (1-{}): ", options.len() + 1);
+    print!("  请选择 (1-{}，回车选中建议项): ", options.len() + 1);
     let _ = std::io::stdout().flush();
     let mut s = String::new();
     match std::io::stdin().read_line(&mut s) {
         Ok(_) => {
             let t = s.trim().to_string();
+            if t.is_empty() {
+                // 回车 → 默认选中建议项（第一个选项）
+                return options[0].1.clone();
+            }
             match t.parse::<usize>() {
                 Ok(n) if n >= 1 && n <= options.len() => options[n - 1].1.clone(),
                 Ok(n) if n == options.len() + 1 => prompt_user_answer(),
-                _ => {
-                    if t.is_empty() {
-                        "(skipped)".to_string()
-                    } else {
-                        t
-                    }
-                }
+                _ => t, // 非数字文本 → 视为自由输入
             }
         }
         Err(_) => "(skipped)".to_string(),

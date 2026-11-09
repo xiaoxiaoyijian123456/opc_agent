@@ -322,21 +322,21 @@ fn agent_tool_def(name: &str) -> ToolDef {
         },
         _ => ToolDef {
             name: "ask_user".into(),
-            description: "Ask the user a question. Provide options for common choices.".into(),
+            description: "Ask the user a question. ALWAYS provide 2-4 options and put the RECOMMENDED choice FIRST — it is the default when the user presses Enter.".into(),
             parameters: serde_json::json!({
                 "type": "object",
                 "properties": {
                     "question": { "type": "string", "description": "Your question" },
                     "options": {
                         "type": "array",
-                        "description": "Selectable choices. Each: {label, value}. Omit for free-text.",
+                        "description": "Selectable choices (2-4 items). Put the RECOMMENDED one first. Each: {label, value}.",
                         "items": {
                             "type": "object",
                             "properties": { "label": { "type": "string" }, "value": { "type": "string" } }
                         }
                     }
                 },
-                "required": ["question"]
+                "required": ["question", "options"]
             }),
         },
     }

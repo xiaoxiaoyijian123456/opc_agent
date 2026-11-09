@@ -91,12 +91,13 @@ Brain 是唯一的路由中心，路由逻辑如下：
   │
   ├─ 普通聊天 → Brain 直接回复
   │
-  └─ 执行意图 → Brain 分析任务类型
+  └─ 执行意图 → Brain 分析任务类型（所有任务必须经过 PM → Dev）
        │
        ├─ 需求/规划类 → dispatch to PM (type: requirement)
-       ├─ 开发/代码类 → dispatch to Dev (type: implement)
-       ├─ 设计/视觉类 → dispatch to UI (type: design)
-       ├─ 测试/质量类 → dispatch to Tester (type: test_plan)
+       ├─ 开发/代码类 → 必须先 dispatch to PM (type: requirement) 产出 PRD，
+       │                 PRD 完成后 dispatch to Dev (type: implement, 依赖 PM 任务)
+       ├─ 设计/视觉类 → 依赖 PM PRD 完成后 dispatch to UI (type: design)
+       ├─ 测试/质量类 → 依赖 Dev 实现完成后 dispatch to Tester (type: test_plan)
        ├─ 流程/报告类 → dispatch to Admin (type: report)
        │
        └─ 复合任务 → Brain 拆解为多个子任务，按依赖顺序串行分发
@@ -106,6 +107,8 @@ Brain 是唯一的路由中心，路由逻辑如下：
             → Step 3: UI 出设计 (design) — 依赖 Step 1
             → Step 4: Tester 写测试计划 (test_plan) — 依赖 Step 2
 ```
+
+**强制流水线**：任何执行类任务都不得直接派发给 Dev/UI/Tester/Admin，必须先经过 PM 产出 PRD，再按依赖顺序进入后续角色。
 
 **角色间协作消息**: 当某角色需要其他角色配合时，通过 Brain 中转：
 ```

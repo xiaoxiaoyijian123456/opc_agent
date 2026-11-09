@@ -57,7 +57,7 @@ pub fn tool_defs() -> Vec<ToolDef> {
         },
         ToolDef {
             name: "ask_user".into(),
-            description: "Ask the user a question or request approval. Provide options for common choices.".into(),
+            description: "Ask the user a question. Provide 2-4 options with the RECOMMENDED choice FIRST (it becomes the default when the user presses Enter).".into(),
             parameters: json!({
                 "type": "object",
                 "properties": {
