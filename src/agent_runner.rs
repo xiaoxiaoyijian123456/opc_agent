@@ -70,9 +70,13 @@ pub fn normalize_path(p: &Path) -> PathBuf {
 /// team_root 可能有两种形态：
 ///   - 已指向 `.myopc_agent` 目录（如配置 `team_root = ".myopc_agent"`）
 ///   - 指向项目根目录（默认 `"."`）
-/// 两种情况下都保证所有角色的 `.artifacts` 产出物落在项目根下的 `.myopc_agent/.artifacts`。
+///     两种情况下都保证所有角色的 `.artifacts` 产出物落在项目根下的 `.myopc_agent/.artifacts`。
 pub fn artifact_root(team_root: &Path) -> PathBuf {
-    if team_root.file_name().map(|n| n == OsStr::new(TEAM_DIR)).unwrap_or(false) {
+    if team_root
+        .file_name()
+        .map(|n| n == OsStr::new(TEAM_DIR))
+        .unwrap_or(false)
+    {
         team_root.join(".artifacts")
     } else {
         team_root.join(TEAM_DIR).join(".artifacts")
@@ -98,7 +102,10 @@ impl AgentRunner {
     }
 
     fn team_root(&self) -> PathBuf {
-        self.workspace.parent().map(|p| p.to_path_buf()).unwrap_or_default()
+        self.workspace
+            .parent()
+            .map(|p| p.to_path_buf())
+            .unwrap_or_default()
     }
 
     pub async fn run(&self, role: &str, task_id: &str) -> String {
@@ -110,7 +117,7 @@ impl AgentRunner {
         let artifact_dir = artifact_root(&team_root);
         let artifact_path = artifact_dir.join(format!("{task_id}_{role}.md"));
         let artifact_rel = artifact_path
-            .strip_prefix(&std::env::current_dir().unwrap_or_default())
+            .strip_prefix(std::env::current_dir().unwrap_or_default())
             .map(|p| p.to_string_lossy().replace('\\', "/"))
             .unwrap_or_else(|_| artifact_path.to_string_lossy().into_owned());
 
@@ -162,14 +169,21 @@ impl AgentRunner {
             let resp = self
                 .llm
                 .complete(
-                    &[Msg::System(system.to_string()), Msg::User(user_msg.to_string())],
+                    &[
+                        Msg::System(system.to_string()),
+                        Msg::User(user_msg.to_string()),
+                    ],
                     &[],
                     &self.config,
                 )
                 .await?;
-            return Ok(RunResult { text: resp.text, files: Vec::new() });
+            return Ok(RunResult {
+                text: resp.text,
+                files: Vec::new(),
+            });
         }
-        self.run_with_tools(system, user_msg, role, &tool_names).await
+        self.run_with_tools(system, user_msg, role, &tool_names)
+            .await
     }
 
     async fn run_with_tools(
@@ -179,13 +193,12 @@ impl AgentRunner {
         role: &str,
         tool_names: &[&'static str],
     ) -> Result<RunResult, String> {
-        let mut messages: Vec<Msg> =
-            vec![Msg::System(system.to_string()), Msg::User(user_msg.to_string())];
+        let mut messages: Vec<Msg> = vec![
+            Msg::System(system.to_string()),
+            Msg::User(user_msg.to_string()),
+        ];
         let mut written_files: Vec<String> = Vec::new();
-        let tools: Vec<ToolDef> = tool_names
-            .iter()
-            .map(|&n| agent_tool_def(n))
-            .collect();
+        let tools: Vec<ToolDef> = tool_names.iter().map(|&n| agent_tool_def(n)).collect();
 
         let mut rounds: u32 = 0;
         loop {
@@ -197,19 +210,28 @@ impl AgentRunner {
             }
             let resp: LlmResponse = self.llm.complete(&messages, &tools, &self.config).await?;
             if resp.tool_calls.is_empty() {
-                return Ok(RunResult { text: resp.text, files: written_files });
+                return Ok(RunResult {
+                    text: resp.text,
+                    files: written_files,
+                });
             }
             messages.push(Msg::AssistantToolCalls(resp.tool_calls.clone()));
             for tc in resp.tool_calls {
                 let result = self.handle_tool(&tc.name, &tc.arguments, role).await;
                 if tc.name == "write_file" {
                     if let Some((_, display)) = self.resolve_write_target(
-                        tc.arguments.get("path").and_then(|v| v.as_str()).unwrap_or(""),
+                        tc.arguments
+                            .get("path")
+                            .and_then(|v| v.as_str())
+                            .unwrap_or(""),
                     ) {
                         written_files.push(display);
                     }
                 }
-                messages.push(Msg::ToolResult { id: tc.id, content: result });
+                messages.push(Msg::ToolResult {
+                    id: tc.id,
+                    content: result,
+                });
             }
         }
     }
@@ -227,7 +249,9 @@ impl AgentRunner {
                     ui::print_file_written(role, &display);
                     format!("Written: {display} ({} bytes)", content.len())
                 }
-                None => format!("Invalid path: {raw_path}. Must stay inside the project code root."),
+                None => {
+                    format!("Invalid path: {raw_path}. Must stay inside the project code root.")
+                }
             }
         } else if name == "ask_user" {
             let question = args.get("question").and_then(|v| v.as_str()).unwrap_or("");
@@ -238,8 +262,14 @@ impl AgentRunner {
                     arr.iter()
                         .map(|o| {
                             (
-                                o.get("label").and_then(|x| x.as_str()).unwrap_or("").to_string(),
-                                o.get("value").and_then(|x| x.as_str()).unwrap_or("").to_string(),
+                                o.get("label")
+                                    .and_then(|x| x.as_str())
+                                    .unwrap_or("")
+                                    .to_string(),
+                                o.get("value")
+                                    .and_then(|x| x.as_str())
+                                    .unwrap_or("")
+                                    .to_string(),
                             )
                         })
                         .collect()

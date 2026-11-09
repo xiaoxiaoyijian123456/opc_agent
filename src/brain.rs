@@ -90,15 +90,22 @@ impl Brain {
 
     async fn chat_openai(&mut self, executor: Arc<dyn ToolExecutor>) -> Result<String, String> {
         loop {
-            let resp: LlmResponse = self.llm.complete(&self.messages, &self.tools, &self.config).await?;
+            let resp: LlmResponse = self
+                .llm
+                .complete(&self.messages, &self.tools, &self.config)
+                .await?;
             if resp.tool_calls.is_empty() {
                 self.messages.push(Msg::Assistant(resp.text.clone()));
                 return Ok(resp.text);
             }
-            self.messages.push(Msg::AssistantToolCalls(resp.tool_calls.clone()));
+            self.messages
+                .push(Msg::AssistantToolCalls(resp.tool_calls.clone()));
             for tc in resp.tool_calls {
                 let result = executor.execute(&tc.name, &tc.arguments).await;
-                self.messages.push(Msg::ToolResult { id: tc.id, content: result });
+                self.messages.push(Msg::ToolResult {
+                    id: tc.id,
+                    content: result,
+                });
             }
         }
     }
@@ -113,7 +120,10 @@ impl Brain {
             .cloned()
             .collect();
         loop {
-            let resp: LlmResponse = self.llm.complete(&api_messages, &self.tools, &self.config).await?;
+            let resp: LlmResponse = self
+                .llm
+                .complete(&api_messages, &self.tools, &self.config)
+                .await?;
             if resp.tool_calls.is_empty() {
                 self.messages.push(Msg::Assistant(resp.text.clone()));
                 return Ok(resp.text);
@@ -121,7 +131,10 @@ impl Brain {
             api_messages.push(Msg::AssistantToolCalls(resp.tool_calls.clone()));
             for tc in resp.tool_calls {
                 let result = executor.execute(&tc.name, &tc.arguments).await;
-                api_messages.push(Msg::ToolResult { id: tc.id, content: result });
+                api_messages.push(Msg::ToolResult {
+                    id: tc.id,
+                    content: result,
+                });
             }
         }
     }

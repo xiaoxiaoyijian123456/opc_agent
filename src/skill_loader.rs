@@ -81,16 +81,28 @@ impl SkillLoader {
                 .collect();
             for entry in entries {
                 let manifest_path = entry.join("manifest.json");
-                if !manifest_path.exists() { continue; }
+                if !manifest_path.exists() {
+                    continue;
+                }
                 if let Ok(s) = std::fs::read_to_string(&manifest_path) {
                     if let Ok(m) = serde_json::from_str::<SkillManifest>(&s) {
                         let name = m.name.clone().unwrap_or_else(|| {
-                            entry.file_name().map(|f| f.to_string_lossy().into_owned()).unwrap_or_default()
+                            entry
+                                .file_name()
+                                .map(|f| f.to_string_lossy().into_owned())
+                                .unwrap_or_default()
                         });
-                        let params = m.parameters.clone().unwrap_or_else(|| {
-                            Value::Object(Default::default())
-                        });
-                        cache.insert(name.clone(), SkillInfo { manifest: m.clone(), path: entry });
+                        let params = m
+                            .parameters
+                            .clone()
+                            .unwrap_or_else(|| Value::Object(Default::default()));
+                        cache.insert(
+                            name.clone(),
+                            SkillInfo {
+                                manifest: m.clone(),
+                                path: entry,
+                            },
+                        );
                         tool_defs.push(skill_tool(
                             &name,
                             m.description.as_deref().unwrap_or(&name),
@@ -109,7 +121,12 @@ impl SkillLoader {
         let Some(info) = info else {
             return format!("Skill not found: {skill_name}");
         };
-        let entry_file = info.path.join(info.manifest.entry.clone().unwrap_or_else(|| "run.sh".into()));
+        let entry_file = info.path.join(
+            info.manifest
+                .entry
+                .clone()
+                .unwrap_or_else(|| "run.sh".into()),
+        );
         if !entry_file.exists() {
             return format!("Entry not found: {}", entry_file.display());
         }
@@ -168,7 +185,7 @@ impl SkillLoader {
 
         match status {
             Ok(st) if st.success() => {}
-            _ => return format!("Clone failed: check the URL and git availability"),
+            _ => return "Clone failed: check the URL and git availability".to_string(),
         }
 
         if !dest.join("manifest.json").exists() {

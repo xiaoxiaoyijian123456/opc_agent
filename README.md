@@ -10,7 +10,6 @@
 </p>
 
 <p align="center">
-  <a href="https://www.npmjs.com/package/myopc-cli"><img src="https://img.shields.io/npm/v/myopc-cli?color=blue&label=npm" alt="npm"></a>
   <a href="https://github.com/CroTuyuzhe/opc_agent/blob/main/LICENSE"><img src="https://img.shields.io/badge/license-Apache%202.0-green" alt="license"></a>
   <img src="https://img.shields.io/badge/LLM-OpenAI%20%7C%20Anthropic-purple" alt="LLM">
 </p>
@@ -98,9 +97,17 @@ MYOPC 是一个运行在终端里的 **AI 多智能体协作框架**。你只需
 
 ### 安装
 
+需要安装 stable Rust 工具链（包含 `cargo`）。在项目仓库根目录执行：
+
 ```bash
-npm install -g myopc-cli
+cargo install --path .
+
+mkdir -p ~/.myopc
+cp -n scaffold/myopc.json.example ~/.myopc/myopc.json
+chmod 600 ~/.myopc/myopc.json
 ```
+
+`cargo install` 会将 `myopc` 安装到 Cargo 的二进制目录（通常为 `~/.cargo/bin`）。请确保该目录已加入 `PATH`。scaffold 已嵌入二进制，安装后不依赖本仓库目录。
 
 ### 初始化项目
 
@@ -341,7 +348,7 @@ my-startup/
 | `api_key` | API 密钥 | — |
 | `base_url` | API 端点（兼容 OpenAI 格式的服务都能用） | `https://api.openai.com/v1` |
 | `default_model` | 模型名称 | `gpt-4o` |
-| `team_root` | 团队根目录（相对启动目录） | `.` |
+| `team_root` | 团队根目录（相对启动目录） | `.myopc_agent` |
 | `code_root` | 代码根目录；`"."` 表示当前目录就是代码目录（默认值） | `.` |
 | `max_tokens` | 单次回复最大 token 数 | `8192` |
 | `temperature` | 生成温度 (0-2) | `0.7` |
@@ -407,7 +414,7 @@ export MYOPC_TEMPERATURE="0.7"
 | 命令 | 说明 |
 |------|------|
 | `myopc init` | 初始化团队项目目录 |
-| `opc` | 启动交互式终端 |
+| `myopc` | 启动交互式终端 |
 | `/help` | 显示帮助信息 |
 | `/status` | 查看各角色状态（idle / working / queued） |
 | `/tasks` | 列出所有任务 |
@@ -416,7 +423,6 @@ export MYOPC_TEMPERATURE="0.7"
 | `/skills` | 列出已安装的技能插件 |
 | `/skill install <url>` | 从 GitHub 安装 Skill 插件 |
 | `/skill remove <name>` | 卸载插件 |
-| `/compact` | 切换紧凑输出模式 |
 | `/exit` | 退出 |
 
 ---

@@ -62,19 +62,13 @@ impl Bus {
         std::fs::create_dir_all(&self.archive).ok();
     }
 
-    pub fn dispatch(
-        &self,
-        to_role: &str,
-        title: &str,
-        content: &str,
-        opts: DispatchOpts,
-    ) -> Task {
+    pub fn dispatch(&self, to_role: &str, title: &str, content: &str, opts: DispatchOpts) -> Task {
         let id: String = uuid::Uuid::new_v4().simple().to_string()[..8].to_string();
         let task = Task {
             id: id.clone(),
             from: opts.from_role.clone().unwrap_or_else(|| "boss".into()),
             to: to_role.to_string(),
-            msg_type: opts.msg_type.clone().unwrap_or_else(|| String::new()),
+            msg_type: opts.msg_type.clone().unwrap_or_else(String::new),
             title: title.to_string(),
             content: content.to_string(),
             context: opts.context.unwrap_or(Value::Object(Default::default())),
@@ -83,16 +77,32 @@ impl Bus {
             result: None,
             completed_at: None,
         };
-        let path = self.root.join(to_role).join("inbox").join(format!("{id}.json"));
+        let path = self
+            .root
+            .join(to_role)
+            .join("inbox")
+            .join(format!("{id}.json"));
         std::fs::write(path, serde_json::to_string_pretty(&task).unwrap()).ok();
         task
     }
 
     pub fn claim(&self, role: &str, task_id: &str) -> Option<Task> {
-        let src = self.root.join(role).join("inbox").join(format!("{task_id}.json"));
-        if !src.exists() { return None; }
-        let dst = self.root.join(role).join("active").join(format!("{task_id}.json"));
-        let mut task: Task = std::fs::read_to_string(&src).ok().and_then(|s| serde_json::from_str(&s).ok())?;
+        let src = self
+            .root
+            .join(role)
+            .join("inbox")
+            .join(format!("{task_id}.json"));
+        if !src.exists() {
+            return None;
+        }
+        let dst = self
+            .root
+            .join(role)
+            .join("active")
+            .join(format!("{task_id}.json"));
+        let mut task: Task = std::fs::read_to_string(&src)
+            .ok()
+            .and_then(|s| serde_json::from_str(&s).ok())?;
         task.status = "active".into();
         std::fs::write(&dst, serde_json::to_string_pretty(&task).unwrap()).ok();
         std::fs::remove_file(&src).ok();
@@ -100,15 +110,27 @@ impl Bus {
     }
 
     pub fn complete(&self, role: &str, task_id: &str, result_summary: &str) -> Option<Task> {
-        let src = self.root.join(role).join("active").join(format!("{task_id}.json"));
-        if !src.exists() { return None; }
-        let mut task: Task = std::fs::read_to_string(&src).ok().and_then(|s| serde_json::from_str(&s).ok())?;
+        let src = self
+            .root
+            .join(role)
+            .join("active")
+            .join(format!("{task_id}.json"));
+        if !src.exists() {
+            return None;
+        }
+        let mut task: Task = std::fs::read_to_string(&src)
+            .ok()
+            .and_then(|s| serde_json::from_str(&s).ok())?;
         task.status = "completed".into();
         task.result = Some(result_summary.to_string());
         task.completed_at = Some(now_iso());
         let date_dir = self.archive.join(today());
         std::fs::create_dir_all(&date_dir).ok();
-        std::fs::write(date_dir.join(format!("{task_id}.json")), serde_json::to_string_pretty(&task).unwrap()).ok();
+        std::fs::write(
+            date_dir.join(format!("{task_id}.json")),
+            serde_json::to_string_pretty(&task).unwrap(),
+        )
+        .ok();
         std::fs::remove_file(&src).ok();
         Some(task)
     }
@@ -133,15 +155,24 @@ impl Bus {
             } else {
                 "idle"
             };
-            status.insert(role.to_string(), RoleStatus { state: state.into(), inbox, active });
+            status.insert(
+                role.to_string(),
+                RoleStatus {
+                    state: state.into(),
+                    inbox,
+                    active,
+                },
+            );
         }
         status
     }
 
     fn list_dir(&self, dir: &std::path::Path) -> Vec<Task> {
         let mut tasks = Vec::new();
-        if !dir.exists() { return tasks; }
-        let mut files: Vec<PathBuf> = std::fs::read_dir(&dir)
+        if !dir.exists() {
+            return tasks;
+        }
+        let mut files: Vec<PathBuf> = std::fs::read_dir(dir)
             .ok()
             .into_iter()
             .flat_map(|it| it.collect::<Vec<_>>())
@@ -161,14 +192,10 @@ impl Bus {
     }
 }
 
+#[derive(Default)]
 pub struct DispatchOpts {
     pub from_role: Option<String>,
     pub msg_type: Option<String>,
     pub context: Option<Value>,
 }
 
-impl Default for DispatchOpts {
-    fn default() -> Self {
-        DispatchOpts { from_role: None, msg_type: None, context: None }
-    }
-}

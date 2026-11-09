@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# deploy.sh — 编译并发布 myopc 到 ~/.myopc/bin（含 scaffold 与默认配置同步）
+# deploy.sh — 可选的本地开发部署脚本；普通安装使用 cargo install --path .
 set -euo pipefail
 
 cd "$(dirname "$0")"

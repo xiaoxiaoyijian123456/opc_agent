@@ -1,5 +1,5 @@
 use colored::Colorize;
-use std::path::{Path, PathBuf};
+use std::path::Path;
 
 pub const TEAM_DIR: &str = ".myopc_agent";
 
@@ -15,93 +15,143 @@ const RUNTIME_DIRS: [&str; 7] = [
     "memory_center/project_history",
 ];
 
-fn scaffold_root() -> PathBuf {
-    if let Ok(p) = std::env::var("MYOPC_SCAFFOLD") {
-        let p = PathBuf::from(p);
-        if p.exists() { return p; }
-    }
-    let manifest_dir = PathBuf::from(env!("CARGO_MANIFEST_DIR"));
-    let from_repo = manifest_dir.join("scaffold");
-    if from_repo.exists() { return from_repo; }
-    if let Ok(exe) = std::env::current_exe() {
-        if let Some(dir) = exe.parent() {
-            let p = dir.join("../scaffold");
-            if p.exists() { return p; }
-        }
-    }
-    from_repo
-}
-
-fn get_all_files(dir: &Path) -> Vec<PathBuf> {
-    let mut results = Vec::new();
-    if let Ok(entries) = std::fs::read_dir(dir) {
-        for entry in entries.flatten() {
-            let full = entry.path();
-            if entry.file_type().map(|t| t.is_dir()).unwrap_or(false) {
-                results.extend(get_all_files(&full));
-            } else {
-                results.push(full);
-            }
-        }
-    }
-    results
-}
+const SCAFFOLD_FILES: &[(&str, &str)] = &[
+    ("AGENTS.md", include_str!("../scaffold/AGENTS.md")),
+    ("boundary.md", include_str!("../scaffold/boundary.md")),
+    (
+        "communication/handoff_protocols.md",
+        include_str!("../scaffold/communication/handoff_protocols.md"),
+    ),
+    (
+        "knowledge_base/corp_style/workstyle.md",
+        include_str!("../scaffold/knowledge_base/corp_style/workstyle.md"),
+    ),
+    (
+        "memory_center/reflection.log",
+        include_str!("../scaffold/memory_center/reflection.log"),
+    ),
+    (
+        "memory_center/user.md",
+        include_str!("../scaffold/memory_center/user.md"),
+    ),
+    (
+        "myopc.json.example",
+        include_str!("../scaffold/myopc.json.example"),
+    ),
+    (
+        "staff/admin_bp/bp_identity.md",
+        include_str!("../scaffold/staff/admin_bp/bp_identity.md"),
+    ),
+    (
+        "staff/admin_bp/output_template.md",
+        include_str!("../scaffold/staff/admin_bp/output_template.md"),
+    ),
+    (
+        "staff/boss_decide/identity.md",
+        include_str!("../scaffold/staff/boss_decide/identity.md"),
+    ),
+    (
+        "staff/boss_decide/intervention.md",
+        include_str!("../scaffold/staff/boss_decide/intervention.md"),
+    ),
+    (
+        "staff/dev_forge/backend_spec.md",
+        include_str!("../scaffold/staff/dev_forge/backend_spec.md"),
+    ),
+    (
+        "staff/dev_forge/dev_identity.md",
+        include_str!("../scaffold/staff/dev_forge/dev_identity.md"),
+    ),
+    (
+        "staff/dev_forge/frontend_spec.md",
+        include_str!("../scaffold/staff/dev_forge/frontend_spec.md"),
+    ),
+    (
+        "staff/pm_office/pm_identity.md",
+        include_str!("../scaffold/staff/pm_office/pm_identity.md"),
+    ),
+    (
+        "staff/pm_office/pm_rules.md",
+        include_str!("../scaffold/staff/pm_office/pm_rules.md"),
+    ),
+    (
+        "staff/tester/tester_identity.md",
+        include_str!("../scaffold/staff/tester/tester_identity.md"),
+    ),
+    (
+        "staff/tester/tester_spec.md",
+        include_str!("../scaffold/staff/tester/tester_spec.md"),
+    ),
+    (
+        "staff/ui_ux_studio/design_spec.md",
+        include_str!("../scaffold/staff/ui_ux_studio/design_spec.md"),
+    ),
+    (
+        "staff/ui_ux_studio/design_system_template.md",
+        include_str!("../scaffold/staff/ui_ux_studio/design_system_template.md"),
+    ),
+    (
+        "staff/ui_ux_studio/ui_identity.md",
+        include_str!("../scaffold/staff/ui_ux_studio/ui_identity.md"),
+    ),
+];
 
 pub fn init_project(target: &Path) {
-    let project_dir = target.to_path_buf();
-    let target_root = project_dir.join(TEAM_DIR);
-    let scaffold = scaffold_root();
-
-    if !scaffold.exists() {
-        eprintln!("{}", "Error: scaffold data not found in package.".red());
-        return;
-    }
-
+    let target_root = target.join(TEAM_DIR);
     let mut created: Vec<String> = Vec::new();
     let mut skipped: usize = 0;
 
-    let all_files = get_all_files(&scaffold);
-    for src_file in all_files {
-        if src_file.file_name().map(|f| f.to_string_lossy().starts_with('.')).unwrap_or(false) {
-            continue;
-        }
-        let rel = src_file.strip_prefix(&scaffold).unwrap().to_path_buf();
-        let dst = target_root.join(&rel);
-        if dst.exists() {
+    for (relative_path, content) in SCAFFOLD_FILES {
+        let destination = target_root.join(relative_path);
+        if destination.exists() {
             skipped += 1;
             continue;
         }
-        if let Some(parent) = dst.parent() {
+        if let Some(parent) = destination.parent() {
             std::fs::create_dir_all(parent).ok();
         }
-        if std::fs::copy(&src_file, &dst).is_ok() {
-            created.push(rel.to_string_lossy().into_owned());
+        if std::fs::write(&destination, content).is_ok() {
+            created.push(relative_path.to_string());
         }
     }
 
     for pattern in RUNTIME_DIRS {
         if pattern.contains("{role}") {
             for role in ROLES {
-                let p = target_root.join(pattern.replace("{role}", role));
-                std::fs::create_dir_all(&p).ok();
+                let path = target_root.join(pattern.replace("{role}", role));
+                std::fs::create_dir_all(&path).ok();
             }
         } else {
             std::fs::create_dir_all(target_root.join(pattern)).ok();
         }
     }
 
-    println!("\n{}", format!("MYOPC initialized in {}", target_root.display()).bold().green());
-    println!("  {}\n", "Config: 全局配置 ~/.myopc/myopc.json（init 不生成项目内配置）".dimmed());
+    println!(
+        "\n{}",
+        format!("MYOPC initialized in {}", target_root.display())
+            .bold()
+            .green()
+    );
+    println!(
+        "  {}\n",
+        "Config: 全局配置 ~/.myopc/myopc.json（init 不生成项目内配置）".dimmed()
+    );
     if !created.is_empty() {
-        for f in &created {
-            println!("  {} {}", "+".green(), format!("{TEAM_DIR}/{f}"));
+        for file in &created {
+            println!("  {} {TEAM_DIR}/{file}", "+".green());
         }
     }
     if skipped > 0 {
-        println!("\n  {} existing files unchanged", skipped.to_string().dimmed());
+        println!(
+            "\n  {} existing files unchanged",
+            skipped.to_string().dimmed()
+        );
     }
     println!("\n{}", "Next steps:".bold());
-    println!("  1. Edit {} — set your api_key", "~/.myopc/myopc.json".cyan());
+    println!(
+        "  1. Edit {} — set your api_key",
+        "~/.myopc/myopc.json".cyan()
+    );
     println!("  2. Run {} to start", "myopc".cyan());
     println!();
 }

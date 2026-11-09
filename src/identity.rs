@@ -31,11 +31,15 @@ fn role_identity_file(role: &str) -> &'static str {
 
 impl IdentityEngine {
     pub fn new(team_root: &Path) -> IdentityEngine {
-        IdentityEngine { team_root: team_root.to_path_buf() }
+        IdentityEngine {
+            team_root: team_root.to_path_buf(),
+        }
     }
 
     fn read_or_empty(&self, path: &Path) -> String {
-        std::fs::read_to_string(path).map(|s| s.trim().to_string()).unwrap_or_default()
+        std::fs::read_to_string(path)
+            .map(|s| s.trim().to_string())
+            .unwrap_or_default()
     }
 
     pub fn load_agents_md(&self) -> String {
@@ -43,7 +47,12 @@ impl IdentityEngine {
     }
 
     pub fn load_handoff(&self) -> String {
-        self.read_or_empty(&self.team_root.join("communication").join("handoff_protocols.md"))
+        self.read_or_empty(
+            &self
+                .team_root
+                .join("communication")
+                .join("handoff_protocols.md"),
+        )
     }
 
     pub fn load_boundary(&self) -> String {
@@ -52,12 +61,16 @@ impl IdentityEngine {
 
     pub fn load_knowledge(&self) -> String {
         let kb = self.team_root.join("knowledge_base");
-        if !kb.exists() { return String::new(); }
+        if !kb.exists() {
+            return String::new();
+        }
         self.read_md_recursive(&kb)
     }
 
     fn read_md_recursive(&self, dir: &Path) -> String {
-        if !dir.exists() { return String::new(); }
+        if !dir.exists() {
+            return String::new();
+        }
         let mut parts: Vec<String> = Vec::new();
         let mut entries: Vec<PathBuf> = std::fs::read_dir(dir)
             .ok()
@@ -70,34 +83,56 @@ impl IdentityEngine {
         for p in entries {
             if p.is_dir() {
                 let sub = self.read_md_recursive(&p);
-                if !sub.is_empty() { parts.push(sub); }
+                if !sub.is_empty() {
+                    parts.push(sub);
+                }
             } else if p.extension().map(|e| e == "md").unwrap_or(false) {
-                let text = std::fs::read_to_string(&p).map(|s| s.trim().to_string()).unwrap_or_default();
-                if !text.is_empty() { parts.push(text); }
+                let text = std::fs::read_to_string(&p)
+                    .map(|s| s.trim().to_string())
+                    .unwrap_or_default();
+                if !text.is_empty() {
+                    parts.push(text);
+                }
             }
         }
         parts.join("\n\n")
     }
 
     pub fn load_identity(&self, role: &str) -> String {
-        let file = self.team_root.join("staff").join(role_dir(role)).join(role_identity_file(role));
+        let file = self
+            .team_root
+            .join("staff")
+            .join(role_dir(role))
+            .join(role_identity_file(role));
         if file.exists() {
-            return std::fs::read_to_string(&file).map(|s| s.trim().to_string()).unwrap_or_default();
+            return std::fs::read_to_string(&file)
+                .map(|s| s.trim().to_string())
+                .unwrap_or_default();
         }
         format!("You are the {role} agent.")
     }
 
     pub fn load_boss_identity(&self) -> String {
-        let file = self.team_root.join("staff").join("boss_decide").join("identity.md");
+        let file = self
+            .team_root
+            .join("staff")
+            .join("boss_decide")
+            .join("identity.md");
         if file.exists() {
-            std::fs::read_to_string(&file).map(|s| s.trim().to_string()).unwrap_or_default()
+            std::fs::read_to_string(&file)
+                .map(|s| s.trim().to_string())
+                .unwrap_or_default()
         } else {
             String::new()
         }
     }
 
     pub fn read_intervention(&self) -> String {
-        let file = self.team_root.join("staff").join("boss_decide").join("intervention.md");
+        let file = self
+            .team_root
+            .join("staff")
+            .join("boss_decide")
+            .join("intervention.md");
         if file.exists() {
             std::fs::read_to_string(&file)
                 .map(|s| s.trim().to_uppercase())
@@ -109,16 +144,28 @@ impl IdentityEngine {
 
     pub fn load_recent_reflections(&self, role: &str, max_count: usize) -> String {
         let archive_dir = self.team_root.join("memory_center").join("archive");
-        if !archive_dir.exists() { return String::new(); }
+        if !archive_dir.exists() {
+            return String::new();
+        }
         let mut entries: Vec<PathBuf> = std::fs::read_dir(&archive_dir)
             .ok()
             .into_iter()
             .flat_map(|it| it.collect::<Vec<_>>())
             .filter_map(|e| e.ok())
             .map(|e| e.path())
-            .filter(|p| p.is_dir() && !p.file_name().map(|f| f.to_string_lossy().starts_with('.')).unwrap_or(false))
+            .filter(|p| {
+                p.is_dir()
+                    && !p
+                        .file_name()
+                        .map(|f| f.to_string_lossy().starts_with('.'))
+                        .unwrap_or(false)
+            })
             .collect();
-        entries.sort_by_key(|p| p.file_name().map(|f| f.to_string_lossy().into_owned()).unwrap_or_default());
+        entries.sort_by_key(|p| {
+            p.file_name()
+                .map(|f| f.to_string_lossy().into_owned())
+                .unwrap_or_default()
+        });
         entries.reverse();
 
         let mut lines: Vec<String> = Vec::new();
@@ -129,25 +176,47 @@ impl IdentityEngine {
                 .flat_map(|it| it.collect::<Vec<_>>())
                 .filter_map(|e| e.ok())
                 .map(|e| e.path())
-                .filter(|p| p.file_name().map(|f| f.to_string_lossy().contains(&format!("_{role}_reflection.json"))).unwrap_or(false))
+                .filter(|p| {
+                    p.file_name()
+                        .map(|f| {
+                            f.to_string_lossy()
+                                .contains(&format!("_{role}_reflection.json"))
+                        })
+                        .unwrap_or(false)
+                })
                 .collect();
             refl_files.sort();
             refl_files.reverse();
             for f in refl_files {
                 if let Ok(s) = std::fs::read_to_string(&f) {
                     if let Ok(v) = serde_json::from_str::<serde_json::Value>(&s) {
-                        let tag = if v["success"].as_bool().unwrap_or(false) { "OK" } else { "FAIL" };
+                        let tag = if v["success"].as_bool().unwrap_or(false) {
+                            "OK"
+                        } else {
+                            "FAIL"
+                        };
                         let typ = v["type"].as_str().unwrap_or("?");
                         let title = v["title"].as_str().unwrap_or("");
-                        let summary: String = v["summary"].as_str().unwrap_or("").chars().take(80).collect();
+                        let summary: String = v["summary"]
+                            .as_str()
+                            .unwrap_or("")
+                            .chars()
+                            .take(80)
+                            .collect();
                         lines.push(format!("- [{typ}] \"{title}\" → {tag}: {summary}"));
                     }
                 }
-                if lines.len() >= max_count { break; }
+                if lines.len() >= max_count {
+                    break;
+                }
             }
-            if lines.len() >= max_count { break; }
+            if lines.len() >= max_count {
+                break;
+            }
         }
-        if lines.is_empty() { return String::new(); }
+        if lines.is_empty() {
+            return String::new();
+        }
         format!("## Recent Experience\n{}", lines.join("\n"))
     }
 

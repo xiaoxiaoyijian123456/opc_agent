@@ -8,6 +8,7 @@ use myopc::tools::ToolDef;
 use serde_json::json;
 use std::collections::VecDeque;
 use std::path::PathBuf;
+use std::process::Command;
 use std::sync::{Arc, Mutex};
 
 struct MockLlm {
@@ -53,30 +54,68 @@ fn test_config(team_root: &std::path::Path) -> Config {
     }
 }
 
+fn myopc_command() -> Command {
+    let mut command = Command::new(env!("CARGO_BIN_EXE_myopc"));
+    for name in [
+        "MYOPC_API_KEY",
+        "MYOPC_BASE_URL",
+        "MYOPC_MODEL",
+        "MYOPC_PROVIDER",
+        "MYOPC_TEAM_ROOT",
+        "MYOPC_CODE_ROOT",
+        "MYOPC_MAX_TOKENS",
+        "MYOPC_TEMPERATURE",
+    ] {
+        command.env_remove(name);
+    }
+    command
+}
+
 #[tokio::test]
 async fn bus_lifecycle() {
     let dir = temp_dir("bus");
     let bus = Bus::new(&dir);
 
-    let task = bus.dispatch("pm", "分析需求", "做一个贪吃蛇", DispatchOpts {
-        from_role: Some("boss".into()),
-        msg_type: Some("requirement".into()),
-        context: Some(json!({ "depends_on": ["x"] })),
-    });
+    let task = bus.dispatch(
+        "pm",
+        "分析需求",
+        "做一个贪吃蛇",
+        DispatchOpts {
+            from_role: Some("boss".into()),
+            msg_type: Some("requirement".into()),
+            context: Some(json!({ "depends_on": ["x"] })),
+        },
+    );
     assert_eq!(task.status, "pending");
-    assert!(dir.join("communication/bus/pm/inbox").join(format!("{}.json", task.id)).exists());
+    assert!(dir
+        .join("communication/bus/pm/inbox")
+        .join(format!("{}.json", task.id))
+        .exists());
 
     let claimed = bus.claim("pm", &task.id).unwrap();
     assert_eq!(claimed.status, "active");
-    assert!(!dir.join("communication/bus/pm/inbox").join(format!("{}.json", task.id)).exists());
-    assert!(dir.join("communication/bus/pm/active").join(format!("{}.json", task.id)).exists());
+    assert!(!dir
+        .join("communication/bus/pm/inbox")
+        .join(format!("{}.json", task.id))
+        .exists());
+    assert!(dir
+        .join("communication/bus/pm/active")
+        .join(format!("{}.json", task.id))
+        .exists());
 
     let completed = bus.complete("pm", &task.id, "PRD 完成").unwrap();
     assert_eq!(completed.status, "completed");
     assert_eq!(completed.result.as_deref(), Some("PRD 完成"));
     let today = chrono::Utc::now().format("%Y-%m-%d").to_string();
-    assert!(dir.join("memory_center/archive").join(&today).join(format!("{}.json", task.id)).exists());
-    assert!(!dir.join("communication/bus/pm/active").join(format!("{}.json", task.id)).exists());
+    assert!(dir
+        .join("memory_center/archive")
+        .join(&today)
+        .join(format!("{}.json", task.id))
+        .exists());
+    assert!(!dir
+        .join("communication/bus/pm/active")
+        .join(format!("{}.json", task.id))
+        .exists());
 
     let status = bus.get_all_status();
     assert_eq!(status["pm"].state, "idle");
@@ -110,7 +149,9 @@ fn resolve_write_target_mappings() {
         bus,
         identity,
         team_root.join("workspace"),
-        Arc::new(MockLlm { responses: Arc::new(Mutex::new(VecDeque::new())) }),
+        Arc::new(MockLlm {
+            responses: Arc::new(Mutex::new(VecDeque::new())),
+        }),
     );
     let code_root = dir.join("code");
     let runner = runner_set_code_root(runner, code_root.clone());
@@ -183,7 +224,10 @@ async fn agent_run_writes_code_and_artifact() {
                 arguments: json!({ "path": "src/app.go", "content": "package main\n\nfunc main() {}\n" }),
             }],
         },
-        LlmResponse { text: "开发完成".into(), tool_calls: vec![] },
+        LlmResponse {
+            text: "开发完成".into(),
+            tool_calls: vec![],
+        },
     ])));
 
     let config = test_config(&team_root);
@@ -194,15 +238,22 @@ async fn agent_run_writes_code_and_artifact() {
         bus.clone(),
         identity,
         team_root.join("workspace"),
-        Arc::new(MockLlm { responses: responses.clone() }),
+        Arc::new(MockLlm {
+            responses: responses.clone(),
+        }),
     );
     runner.code_root = Some(code_root.clone());
 
-    let task = bus.dispatch("dev", "实现贪吃蛇", "写一个 Go 程序", DispatchOpts {
-        from_role: Some("boss".into()),
-        msg_type: Some("implement".into()),
-        context: None,
-    });
+    let task = bus.dispatch(
+        "dev",
+        "实现贪吃蛇",
+        "写一个 Go 程序",
+        DispatchOpts {
+            from_role: Some("boss".into()),
+            msg_type: Some("implement".into()),
+            context: None,
+        },
+    );
 
     let summary = runner.run("dev", &task.id).await;
     assert!(summary.contains("开发完成"), "summary: {summary}");
@@ -212,7 +263,9 @@ async fn agent_run_writes_code_and_artifact() {
     let content = std::fs::read_to_string(&file).unwrap();
     assert!(content.contains("package main"));
 
-    let artifact = team_root.join(".artifacts").join(format!("{}_dev.md", task.id));
+    let artifact = team_root
+        .join(".artifacts")
+        .join(format!("{}_dev.md", task.id));
     assert!(artifact.exists(), "artifact should be written");
     let artifact_content = std::fs::read_to_string(&artifact).unwrap();
     assert!(artifact_content.contains("开发完成"));
@@ -229,11 +282,77 @@ fn init_creates_myopc_agent_layout() {
 
     assert!(dir.join(".myopc_agent").exists());
     assert!(dir.join(".myopc_agent/AGENTS.md").exists());
-    assert!(!dir.join(".myopc_agent/myopc.json").exists(), "init 不生成项目内配置，使用全局 ~/.myopc/myopc.json");
+    assert!(
+        !dir.join(".myopc_agent/myopc.json").exists(),
+        "init 不生成项目内配置，使用全局 ~/.myopc/myopc.json"
+    );
     assert!(dir.join(".myopc_agent/.artifacts").exists());
     assert!(dir.join(".myopc_agent/workspace").exists());
-    assert!(dir.join(".myopc_agent/skills").exists(), "init 创建 skills 目录，供用户添加 skill 插件");
+    assert!(
+        dir.join(".myopc_agent/skills").exists(),
+        "init 创建 skills 目录，供用户添加 skill 插件"
+    );
     assert!(dir.join(".myopc_agent/communication/bus/pm/inbox").exists());
+    assert!(dir.join(".myopc_agent/myopc.json.example").exists());
+    assert!(dir
+        .join(".myopc_agent/memory_center/reflection.log")
+        .exists());
+
+    std::fs::remove_dir_all(&dir).ok();
+}
+
+#[test]
+fn binary_init_uses_embedded_scaffold_outside_the_repository() {
+    let dir = temp_dir("embedded-init");
+    let output = myopc_command()
+        .arg("init")
+        .current_dir(&dir)
+        .output()
+        .unwrap();
+
+    assert!(output.status.success(), "{output:?}");
+    assert!(dir.join(".myopc_agent/AGENTS.md").exists());
+    assert!(dir
+        .join(".myopc_agent/staff/pm_office/pm_identity.md")
+        .exists());
+
+    std::fs::remove_dir_all(&dir).ok();
+}
+
+#[test]
+fn uninitialized_startup_does_not_create_runtime_directories() {
+    let dir = temp_dir("uninitialized-startup");
+    let home = dir.join("home");
+    let output = myopc_command()
+        .env("HOME", &home)
+        .current_dir(&dir)
+        .output()
+        .unwrap();
+
+    assert!(!output.status.success());
+    assert!(String::from_utf8_lossy(&output.stderr).contains("myopc init"));
+    assert!(!dir.join("workspace").exists());
+    assert!(!dir.join("communication").exists());
+
+    std::fs::remove_dir_all(&dir).ok();
+}
+
+#[test]
+fn malformed_config_stops_startup_with_a_specific_error() {
+    let dir = temp_dir("invalid-config-startup");
+    let home = dir.join("home");
+    std::fs::write(dir.join("myopc.json"), "{not-json").unwrap();
+    let output = myopc_command()
+        .env("HOME", &home)
+        .current_dir(&dir)
+        .output()
+        .unwrap();
+
+    assert!(!output.status.success());
+    let stderr = String::from_utf8_lossy(&output.stderr);
+    assert!(stderr.contains("Invalid config"), "stderr: {stderr}");
+    assert!(stderr.contains("myopc.json"), "stderr: {stderr}");
+    assert!(!dir.join("workspace").exists());
 
     std::fs::remove_dir_all(&dir).ok();
 }

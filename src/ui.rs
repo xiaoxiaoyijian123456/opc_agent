@@ -50,10 +50,16 @@ pub fn print_welcome(
         format!("  Team Root  : {}", team_root.cyan()),
         format!(
             "  Config     : {}",
-            if config_ok { "OK".green() } else { "Missing api_key".red() }
+            if config_ok {
+                "OK".green()
+            } else {
+                "Missing api_key".red()
+            }
         ),
         String::new(),
-        format!("  /help for commands, /exit to quit").dimmed().to_string(),
+        "  /help for commands, /exit to quit"
+            .dimmed()
+            .to_string(),
     ];
     let boxed = draw_box(&lines, None);
     println!("{}", boxed.blue());
@@ -98,12 +104,16 @@ pub fn print_inbox(role: &str, tasks: &[serde_json::Value]) {
         return;
     }
     for t in tasks {
-        println!("  [{}] {}", t["id"].as_str().unwrap_or(""), t["title"].as_str().unwrap_or(""));
+        println!(
+            "  [{}] {}",
+            t["id"].as_str().unwrap_or(""),
+            t["title"].as_str().unwrap_or("")
+        );
     }
 }
 
 pub fn print_help() {
-    let cmds: [(&str, &str); 12] = [
+    let cmds: [(&str, &str); 11] = [
         ("/status", "Show agent status"),
         ("/tasks", "Show task queue"),
         ("/inbox <role>", "View role inbox (pm/dev/ui/tester/admin)"),
@@ -112,7 +122,6 @@ pub fn print_help() {
         ("/skill list", "List installed skills"),
         ("/skill install <url>", "Install skill from GitHub"),
         ("/skill remove <name>", "Remove a skill"),
-        ("/compact", "Toggle compact output"),
         ("/uninstall", "Remove MYOPC from system"),
         ("/help", "This help"),
         ("/exit", "Quit"),
@@ -150,7 +159,12 @@ pub fn print_error(msg: &str) {
 }
 
 pub fn print_agent_working(role: &str, task_title: &str) {
-    println!("  {} {} working on: {}", "▶".green(), role_label(role), task_title);
+    println!(
+        "  {} {} working on: {}",
+        "▶".green(),
+        role_label(role),
+        task_title
+    );
 }
 
 pub fn print_agent_done(role: &str, summary: &str) {
@@ -159,7 +173,12 @@ pub fn print_agent_done(role: &str, summary: &str) {
 }
 
 pub fn print_file_written(role: &str, file_path: &str) {
-    println!("  {} {} wrote: {}", "📄".cyan(), role_label(role), file_path);
+    println!(
+        "  {} {} wrote: {}",
+        "📄".cyan(),
+        role_label(role),
+        file_path
+    );
 }
 
 pub fn print_intervention_block(state: &str) {
@@ -171,7 +190,12 @@ pub fn print_intervention_block(state: &str) {
 }
 
 pub fn print_deepthink_question(role: &str, question: &str) {
-    println!("\n  {} {} asks: {}", "?".yellow(), role_label(role).bold(), question);
+    println!(
+        "\n  {} {} asks: {}",
+        "?".yellow(),
+        role_label(role).bold(),
+        question
+    );
 }
 
 pub fn print_task_notification(role: &str, task_title: &str, summary: &str, artifact_path: &str) {
@@ -214,7 +238,11 @@ pub fn prompt_user_answer() -> String {
     match std::io::stdin().read_line(&mut s) {
         Ok(_) => {
             let s = s.trim().to_string();
-            if s.is_empty() { "(no answer)".to_string() } else { s }
+            if s.is_empty() {
+                "(no answer)".to_string()
+            } else {
+                s
+            }
         }
         Err(_) => "(skipped)".to_string(),
     }
@@ -232,7 +260,7 @@ pub fn prompt_user_select(options: &[(String, String)]) -> String {
             println!("    {}: {}", i + 1, label);
         }
     }
-    println!("    {}: {}", options.len() + 1, "自由输入...");
+    println!("    {}: 自由输入...", options.len() + 1);
     print!("  请选择 (1-{}，回车选中建议项): ", options.len() + 1);
     let _ = std::io::stdout().flush();
     let mut s = String::new();

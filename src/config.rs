@@ -15,7 +15,7 @@ pub struct Config {
 }
 
 #[derive(Deserialize, Default)]
-#[serde(rename_all = "snake_case")]
+#[serde(rename_all = "snake_case", deny_unknown_fields)]
 struct RawConfig {
     provider: Option<String>,
     api_key: Option<String>,
@@ -33,99 +33,241 @@ fn defaults() -> Config {
         api_key: String::new(),
         base_url: "https://api.openai.com/v1".into(),
         default_model: "gpt-4o".into(),
-        team_root: ".".into(),
-        code_root: None,
+        team_root: ".myopc_agent".into(),
+        code_root: Some(".".into()),
         max_tokens: 8192,
         temperature: 0.7,
     }
 }
 
-fn load_json(file: &Path) -> RawConfig {
-    match std::fs::read_to_string(file) {
-        Ok(s) => serde_json::from_str(&s).unwrap_or_default(),
-        Err(_) => RawConfig::default(),
-    }
+fn load_json(file: &Path) -> Result<Option<RawConfig>, String> {
+    let source = match std::fs::read_to_string(file) {
+        Ok(source) => source,
+        Err(error) if error.kind() == std::io::ErrorKind::NotFound => return Ok(None),
+        Err(error) => return Err(format!("Cannot read config {}: {error}", file.display())),
+    };
+    serde_json::from_str(&source)
+        .map(Some)
+        .map_err(|error| format!("Invalid config {}: {error}", file.display()))
 }
 
 fn merge_into(base: &mut Config, raw: RawConfig) {
-    if let Some(v) = raw.provider { base.provider = v; }
-    if let Some(v) = raw.api_key { base.api_key = v; }
-    if let Some(v) = raw.base_url { base.base_url = v; }
-    if let Some(v) = raw.default_model { base.default_model = v; }
-    if let Some(v) = raw.team_root { base.team_root = v; }
-    if let Some(v) = raw.code_root {
-        base.code_root = if v.is_empty() { None } else { Some(v) };
+    if let Some(value) = raw.provider {
+        base.provider = value;
     }
-    if let Some(v) = raw.max_tokens { base.max_tokens = v; }
-    if let Some(v) = raw.temperature { base.temperature = v; }
+    if let Some(value) = raw.api_key {
+        base.api_key = value;
+    }
+    if let Some(value) = raw.base_url {
+        base.base_url = value;
+    }
+    if let Some(value) = raw.default_model {
+        base.default_model = value;
+    }
+    if let Some(value) = raw.team_root {
+        base.team_root = value;
+    }
+    if let Some(value) = raw.code_root {
+        base.code_root = Some(value);
+    }
+    if let Some(value) = raw.max_tokens {
+        base.max_tokens = value;
+    }
+    if let Some(value) = raw.temperature {
+        base.temperature = value;
+    }
 }
 
 fn home() -> PathBuf {
-    std::env::var("HOME").map(PathBuf::from).unwrap_or_else(|_| PathBuf::from("~"))
+    std::env::var("HOME")
+        .map(PathBuf::from)
+        .unwrap_or_else(|_| PathBuf::from("~"))
 }
 
-pub fn load_config() -> Config {
-    let mut cfg = defaults();
+fn apply_env_override(config: &mut Config, name: &str, value: String) -> Result<(), String> {
+    match name {
+        "MYOPC_API_KEY" => config.api_key = value,
+        "MYOPC_BASE_URL" => config.base_url = value,
+        "MYOPC_MODEL" => config.default_model = value,
+        "MYOPC_PROVIDER" => config.provider = value,
+        "MYOPC_TEAM_ROOT" => config.team_root = value,
+        "MYOPC_CODE_ROOT" => config.code_root = Some(value),
+        "MYOPC_MAX_TOKENS" => {
+            config.max_tokens = value
+                .parse()
+                .map_err(|_| format!("{name} must be a positive integer, got {value:?}"))?;
+        }
+        "MYOPC_TEMPERATURE" => {
+            config.temperature = value
+                .parse()
+                .map_err(|_| format!("{name} must be a number from 0 to 2, got {value:?}"))?;
+        }
+        _ => return Ok(()),
+    }
+    Ok(())
+}
 
-    let global = home().join(".myopc").join("myopc.json");
-    merge_into(&mut cfg, load_json(&global));
+fn validate_values(config: &Config) -> Vec<String> {
+    let mut errors = Vec::new();
+    if config.provider != "openai" && config.provider != "anthropic" {
+        errors.push(format!("unknown provider: {}", config.provider));
+    }
+    let valid_url = reqwest::Url::parse(&config.base_url)
+        .is_ok_and(|url| matches!(url.scheme(), "http" | "https") && url.host_str().is_some());
+    if !valid_url {
+        errors.push("base_url must be an absolute HTTP(S) URL".into());
+    }
+    if config.default_model.trim().is_empty() {
+        errors.push("default_model cannot be empty".into());
+    }
+    if config.team_root.trim().is_empty() {
+        errors.push("team_root cannot be empty".into());
+    }
+    if config
+        .code_root
+        .as_deref()
+        .is_some_and(|value| value.trim().is_empty())
+    {
+        errors.push("code_root cannot be empty".into());
+    }
+    if config.max_tokens == 0 {
+        errors.push("max_tokens must be greater than 0".into());
+    }
+    if !config.temperature.is_finite() || !(0.0..=2.0).contains(&config.temperature) {
+        errors.push("temperature must be from 0 to 2".into());
+    }
+    errors
+}
 
-    let hidden = std::env::current_dir()
-        .unwrap_or_default()
-        .join(".myopc_agent")
-        .join("myopc.json");
-    merge_into(&mut cfg, load_json(&hidden));
-
-    let local = std::env::current_dir()
-        .unwrap_or_default()
-        .join("myopc.json");
-    merge_into(&mut cfg, load_json(&local));
-
-    // Environment overrides (highest priority)
-    let env_map: [(&str, &str); 8] = [
-        ("MYOPC_API_KEY", "api_key"),
-        ("MYOPC_BASE_URL", "base_url"),
-        ("MYOPC_MODEL", "default_model"),
-        ("MYOPC_PROVIDER", "provider"),
-        ("MYOPC_TEAM_ROOT", "team_root"),
-        ("MYOPC_CODE_ROOT", "code_root"),
-        ("MYOPC_MAX_TOKENS", "max_tokens"),
-        ("MYOPC_TEMPERATURE", "temperature"),
+pub fn load_config() -> Result<Config, Vec<String>> {
+    let mut config = defaults();
+    let mut errors = Vec::new();
+    let current_dir = std::env::current_dir().unwrap_or_default();
+    let files = [
+        home().join(".myopc").join("myopc.json"),
+        current_dir.join(".myopc_agent").join("myopc.json"),
+        current_dir.join("myopc.json"),
     ];
-    for (k, field) in env_map {
-        if let Ok(v) = std::env::var(k) {
-            if v.is_empty() { continue; }
-            match field {
-                "api_key" => cfg.api_key = v,
-                "base_url" => cfg.base_url = v,
-                "default_model" => cfg.default_model = v,
-                "provider" => cfg.provider = v,
-                "team_root" => cfg.team_root = v,
-                "code_root" => cfg.code_root = Some(v),
-                "max_tokens" => cfg.max_tokens = v.parse().unwrap_or(cfg.max_tokens),
-                "temperature" => cfg.temperature = v.parse().unwrap_or(cfg.temperature),
-                _ => {}
+
+    for file in files {
+        match load_json(&file) {
+            Ok(Some(raw)) => merge_into(&mut config, raw),
+            Ok(None) => {}
+            Err(error) => errors.push(error),
+        }
+    }
+
+    const ENV_NAMES: [&str; 8] = [
+        "MYOPC_API_KEY",
+        "MYOPC_BASE_URL",
+        "MYOPC_MODEL",
+        "MYOPC_PROVIDER",
+        "MYOPC_TEAM_ROOT",
+        "MYOPC_CODE_ROOT",
+        "MYOPC_MAX_TOKENS",
+        "MYOPC_TEMPERATURE",
+    ];
+    for name in ENV_NAMES {
+        if let Ok(value) = std::env::var(name) {
+            if value.is_empty() {
+                continue;
+            }
+            if let Err(error) = apply_env_override(&mut config, name, value) {
+                errors.push(error);
             }
         }
     }
-    cfg
+
+    errors.extend(validate_values(&config));
+    if errors.is_empty() {
+        Ok(config)
+    } else {
+        Err(errors)
+    }
 }
 
-pub fn team_root_path(cfg: &Config) -> PathBuf {
-    let p = PathBuf::from(&cfg.team_root);
-    if p.is_absolute() { p } else { std::env::current_dir().unwrap_or_default().join(p) }
+pub fn team_root_path(config: &Config) -> PathBuf {
+    let path = PathBuf::from(&config.team_root);
+    if path.is_absolute() {
+        path
+    } else {
+        std::env::current_dir().unwrap_or_default().join(path)
+    }
 }
 
-pub fn validate_config(cfg: &Config) -> Vec<String> {
-    let mut errors = Vec::new();
-    if cfg.api_key.is_empty() {
+pub fn validate_config(config: &Config) -> Vec<String> {
+    let mut errors = validate_values(config);
+    if config.api_key.is_empty() {
         errors.push("api_key is required".into());
     }
-    if cfg.provider != "openai" && cfg.provider != "anthropic" {
-        errors.push(format!("unknown provider: {}", cfg.provider));
-    }
-    if !team_root_path(cfg).exists() {
-        errors.push(format!("team_root not found: {}", cfg.team_root));
+    if !team_root_path(config).exists() {
+        errors.push(format!("team_root not found: {}", config.team_root));
     }
     errors
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn defaults_match_initialized_project_layout() {
+        let config = defaults();
+        assert_eq!(config.team_root, ".myopc_agent");
+        assert_eq!(config.code_root.as_deref(), Some("."));
+    }
+
+    #[test]
+    fn malformed_json_reports_the_config_path() {
+        let dir = std::env::temp_dir().join(format!(
+            "myopc-config-test-{}",
+            uuid::Uuid::new_v4().simple()
+        ));
+        std::fs::create_dir_all(&dir).unwrap();
+        let file = dir.join("myopc.json");
+        std::fs::write(&file, "{not-json").unwrap();
+
+        let error = load_json(&file).err().unwrap();
+        assert!(error.contains(&file.display().to_string()));
+        assert!(error.contains("Invalid config"));
+
+        std::fs::remove_dir_all(dir).ok();
+    }
+
+    #[test]
+    fn wrong_field_type_is_an_error() {
+        let dir = std::env::temp_dir().join(format!(
+            "myopc-config-test-{}",
+            uuid::Uuid::new_v4().simple()
+        ));
+        std::fs::create_dir_all(&dir).unwrap();
+        let file = dir.join("myopc.json");
+        std::fs::write(&file, r#"{"max_tokens":"many"}"#).unwrap();
+
+        let error = load_json(&file).err().unwrap();
+        assert!(error.contains("max_tokens"));
+
+        std::fs::remove_dir_all(dir).ok();
+    }
+
+    #[test]
+    fn invalid_values_are_rejected() {
+        let mut config = defaults();
+        config.temperature = 3.0;
+        config.max_tokens = 0;
+        config.base_url = "not-a-url".into();
+
+        let errors = validate_values(&config);
+        assert!(errors.iter().any(|error| error.contains("temperature")));
+        assert!(errors.iter().any(|error| error.contains("max_tokens")));
+        assert!(errors.iter().any(|error| error.contains("base_url")));
+    }
+
+    #[test]
+    fn invalid_environment_number_is_an_error() {
+        let mut config = defaults();
+        let error =
+            apply_env_override(&mut config, "MYOPC_MAX_TOKENS", "not-a-number".into()).unwrap_err();
+        assert!(error.contains("MYOPC_MAX_TOKENS"));
+    }
 }

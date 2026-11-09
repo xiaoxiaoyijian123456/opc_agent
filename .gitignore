@@ -1,3 +1,6 @@
 target/
 *.tsbuildinfo
 .DS_Store
+/.codebase-memory/
+/.myopc_agent/
+/myopc.json

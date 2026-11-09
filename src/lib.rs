@@ -1,6 +1,8 @@
 pub mod agent_runner;
+pub mod app;
 pub mod brain;
 pub mod bus;
+pub mod cli;
 pub mod config;
 pub mod identity;
 pub mod init;

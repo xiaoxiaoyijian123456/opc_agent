@@ -56,7 +56,15 @@ pub struct HttpLlm {
 
 impl HttpLlm {
     pub fn new() -> Self {
-        HttpLlm { client: reqwest::Client::new() }
+        HttpLlm {
+            client: reqwest::Client::new(),
+        }
+    }
+}
+
+impl Default for HttpLlm {
+    fn default() -> Self {
+        Self::new()
     }
 }
 
@@ -98,7 +106,9 @@ pub fn anthropic_split(messages: &[Msg]) -> (String, Vec<Value>) {
     for m in messages {
         match m {
             Msg::System(s) => {
-                if !system.is_empty() { system.push_str("\n"); }
+                if !system.is_empty() {
+                    system.push('\n');
+                }
                 system.push_str(s);
             }
             Msg::User(s) => out.push(json!({
@@ -138,10 +148,9 @@ pub fn parse_openai_response(body: &Value) -> LlmResponse {
     let mut tool_calls = Vec::new();
     if let Some(arr) = msg["tool_calls"].as_array() {
         for tc in arr {
-            let arguments: Value = serde_json::from_str(
-                tc["function"]["arguments"].as_str().unwrap_or("{}"),
-            )
-            .unwrap_or(Value::Null);
+            let arguments: Value =
+                serde_json::from_str(tc["function"]["arguments"].as_str().unwrap_or("{}"))
+                    .unwrap_or(Value::Null);
             tool_calls.push(ToolCallMsg {
                 id: tc["id"].as_str().unwrap_or("").to_string(),
                 name: tc["function"]["name"].as_str().unwrap_or("").to_string(),
@@ -223,7 +232,11 @@ impl HttpLlm {
                         return Ok(parse_openai_response(&parsed));
                     }
                     if is_retriable_status(status) && attempt < LLM_MAX_ATTEMPTS {
-                        eprintln!("  ⚠ OpenAI 返回 {status}，{} 秒后重试 (第 {} 次)", 1u64 << (attempt - 1), attempt);
+                        eprintln!(
+                            "  ⚠ OpenAI 返回 {status}，{} 秒后重试 (第 {} 次)",
+                            1u64 << (attempt - 1),
+                            attempt
+                        );
                         retry_delay(attempt).await;
                         attempt += 1;
                         continue;
@@ -232,7 +245,11 @@ impl HttpLlm {
                 }
                 Err(e) => {
                     if attempt < LLM_MAX_ATTEMPTS {
-                        eprintln!("  ⚠ OpenAI 请求失败：{e}，{} 秒后重试 (第 {} 次)", 1u64 << (attempt - 1), attempt);
+                        eprintln!(
+                            "  ⚠ OpenAI 请求失败：{e}，{} 秒后重试 (第 {} 次)",
+                            1u64 << (attempt - 1),
+                            attempt
+                        );
                         retry_delay(attempt).await;
                         attempt += 1;
                         continue;
@@ -283,7 +300,11 @@ impl HttpLlm {
                         return Ok(parse_anthropic_response(&parsed));
                     }
                     if is_retriable_status(status) && attempt < LLM_MAX_ATTEMPTS {
-                        eprintln!("  ⚠ Anthropic 返回 {status}，{} 秒后重试 (第 {} 次)", 1u64 << (attempt - 1), attempt);
+                        eprintln!(
+                            "  ⚠ Anthropic 返回 {status}，{} 秒后重试 (第 {} 次)",
+                            1u64 << (attempt - 1),
+                            attempt
+                        );
                         retry_delay(attempt).await;
                         attempt += 1;
                         continue;
@@ -292,7 +313,11 @@ impl HttpLlm {
                 }
                 Err(e) => {
                     if attempt < LLM_MAX_ATTEMPTS {
-                        eprintln!("  ⚠ Anthropic 请求失败：{e}，{} 秒后重试 (第 {} 次)", 1u64 << (attempt - 1), attempt);
+                        eprintln!(
+                            "  ⚠ Anthropic 请求失败：{e}，{} 秒后重试 (第 {} 次)",
+                            1u64 << (attempt - 1),
+                            attempt
+                        );
                         retry_delay(attempt).await;
                         attempt += 1;
                         continue;
