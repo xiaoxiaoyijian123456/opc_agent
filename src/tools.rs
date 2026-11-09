@@ -11,37 +11,20 @@ pub struct ToolDef {
 pub fn tool_defs() -> Vec<ToolDef> {
     vec![
         ToolDef {
-            name: "dispatch_task".into(),
-            description: "Send a task to a role's inbox per handoff protocol".into(),
+            name: "start_workflow".into(),
+            description: "Start one deterministic software workflow. The system owns PM, optional UI, Dev, Tester, Admin, PRD approval, dependencies, retries, and failure handling.".into(),
             parameters: json!({
                 "type": "object",
                 "properties": {
-                    "role": { "type": "string", "enum": ["pm", "dev", "ui", "tester", "admin"] },
-                    "msg_type": { "type": "string", "description": "Message type from Decision Rules" },
-                    "title": { "type": "string" },
-                    "content": { "type": "string", "description": "Task description. Include [PRD excerpt] and/or [Design System excerpt] with relevant contract sections." },
-                    "depends_on": { "type": "array", "items": { "type": "string" }, "description": "Upstream task IDs" },
-                    "artifacts": { "type": "array", "items": { "type": "string" }, "description": "Referenced artifact file paths" }
+                    "request": { "type": "string", "description": "Complete original user request and relevant context" }
                 },
-                "required": ["role", "msg_type", "title", "content"]
+                "required": ["request"]
             }),
         },
         ToolDef {
             name: "get_project_status".into(),
             description: "Get current status of all agents and tasks".into(),
             parameters: json!({ "type": "object", "properties": {} }),
-        },
-        ToolDef {
-            name: "execute_role_task".into(),
-            description: "Have a role agent pick up and execute its next inbox task".into(),
-            parameters: json!({
-                "type": "object",
-                "properties": {
-                    "role": { "type": "string", "enum": ["pm", "dev", "ui", "tester", "admin"] },
-                    "task_id": { "type": "string" }
-                },
-                "required": ["role", "task_id"]
-            }),
         },
         ToolDef {
             name: "run_bash".into(),

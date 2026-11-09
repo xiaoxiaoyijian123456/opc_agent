@@ -17,7 +17,7 @@
 
 **权限层级**: `boss > pm = dev = ui = tester = admin`
 
-Boss 的指令对所有角色具有最高优先级。角色之间为平级协作关系，不能互相指挥，只能通过 BUS 发消息请求协作。
+Boss 的指令对所有角色具有最高优先级。角色之间为平级协作关系，不能互相指挥；标准任务流由 orchestrator 统一推进。
 
 ---
 
@@ -25,30 +25,32 @@ Boss 的指令对所有角色具有最高优先级。角色之间为平级协作
 
 ### 2.1 消息流转机制
 
-所有角色之间**不直接对话**，通过文件系统消息总线 (BUS) 异步通信。
+所有角色之间**不直接对话**。任务、依赖、执行尝试和状态以 `.myopc_agent/myopc.db` 中的 SQLite 记录为准。
 
 **发送流程**:
 ```
-发送方 → dispatch(to_role, title, content) → 写入 communication/bus/{to_role}/inbox/{id}.json
+Brain → start_workflow(request) → orchestrator 创建 PM 任务并持久化状态
 ```
 
 **接收与决策流程**:
 ```
-Brain 检测到 inbox 有新消息
-  → 读取消息 JSON
-  → 匹配 Decision Rules (见 2.2)
-  → 命中 → 调用 execute_role_task 执行
-  → 未命中 → 标记 pending，等待 Boss 指示
+orchestrator 读取当前任务
+  → 创建独立执行尝试
+  → 成功后按冻结模板创建唯一下游任务
+  → 失败则停止下游，等待 Boss 重试、修改或终止
 ```
 
 **任务生命周期**:
 ```
-inbox/ (pending) → active/ (claimed) → ARCHIVE/{date}/ (completed)
+pending → active → completed
+               └→ failed → pending（显式重试，保留历史尝试）
+
+PRD 完成后：waiting_approval → active / cancelled
 ```
 
 ### 2.2 Decision Rules — 信箱决策规则
 
-每个角色的信箱只接受特定类型的消息。Brain 根据以下规则自动路由：
+每个角色只接受与其职责匹配的任务。orchestrator 根据确定性模板和 PRD 审批结果推进：
 
 #### PM 信箱
 | 消息类型 | 触发条件 | 处理方式 |
@@ -103,17 +105,17 @@ Brain 是唯一的路由中心，路由逻辑如下：
        └─ 复合任务 → Brain 拆解为多个子任务，按依赖顺序串行分发
             例: "做一个登录功能"
             → Step 1: PM 写 PRD (requirement)
-            → Step 2: Dev 写技术方案 (implement) — 依赖 Step 1
-            → Step 3: UI 出设计 (design) — 依赖 Step 1
-            → Step 4: Tester 写测试计划 (test_plan) — 依赖 Step 2
+            → Step 2: UI 出设计（仅 requires_ui=true）— 依赖 Step 1
+            → Step 3: Dev 写技术方案与代码 — 依赖前一阶段
+            → Step 4: Tester 验证，Admin 总结
 ```
 
 **强制流水线**：任何执行类任务都不得直接派发给 Dev/UI/Tester/Admin，必须先经过 PM 产出 PRD，再按依赖顺序进入后续角色。
 
-**角色间协作消息**: 当某角色需要其他角色配合时，通过 Brain 中转：
+**角色间协作消息**: 角色不得自行创建下游任务；需要变更流程时报告 orchestrator 并等待 Boss 决策：
 ```
-Dev 完成代码 → Brain 自动 dispatch to Tester (type: test_plan)
-Tester 发现 BUG → Brain 自动 dispatch to Dev (type: bugfix)
+Dev 完成代码 → orchestrator 创建 Tester 任务
+Tester 发现阻断问题 → 当前任务失败并暂停，不自动创建 bugfix 循环
 ```
 
 ---
@@ -185,10 +187,8 @@ MYOPC_Team/
 ├── BOUNDARY.md                        ← 安全红线，所有角色强制遵守
 │                                       （配置使用全局 ~/.myopc/myopc.json，init 不生成）
 │
-├── communication/bus/                 ← 消息总线
-│   └── {role}/
-│       ├── inbox/                     ← 待处理 (*.json)
-│       └── active/                    ← 执行中 (*.json)
+├── myopc.db                           ← SQLite 任务与协作状态
+├── myopc.lock                         ← 单项目执行实例锁
 │
 ├── .artifacts/                        ← 所有角色的产出物
 │   └── {task_id}_{role}.md
@@ -251,4 +251,4 @@ MYOPC_Team/
 
 ### 5.4 协作链自动化
 
-当前 Brain 需要显式调用 dispatch + execute 串联多角色。未来可实现 **pipeline 模式**: 定义一条工作流（如 PM→Dev→Tester），Brain 只需触发起点，后续环节自动流转。
+Brain 只调用一次 `start_workflow`。orchestrator 独占 PM、可选 UI、Dev、Tester、Admin 的依赖推进、PRD 审批、失败暂停和重试；角色与 Brain 均不得绕过。

@@ -85,8 +85,8 @@ MYOPC 是一个运行在终端里的 **AI 多智能体协作框架**。你只需
 
 | 模块 | 说明 |
 |------|------|
-| **Brain** | 中枢协调器。接收用户输入，识别意图（聊天 / 任务），拆解复杂需求为多角色子任务，按依赖顺序串行分发 |
-| **Message Bus** | 文件系统消息总线。角色之间不直接对话，所有协作通过 JSON 消息文件异步传递，天然支持断点续跑 |
+| **Brain** | 意图识别与问答入口。开发任务只调用一次 `start_workflow`，不直接控制角色顺序 |
+| **Orchestrator + SQLite** | 确定性管理 PM、可选 UI、Dev、Tester、Admin，持久化依赖、审批、执行尝试与失败恢复 |
 | **Identity Engine** | 每个角色有独立的身份定义、能力边界、输出规范，确保各司其职不越界 |
 | **Tool Loop** | 角色通过 LLM tool-calling 循环执行任务：调用工具 → 获取结果 → 继续推理，直到产出最终交付物 |
 | **Skill System** | 插件机制。从 GitHub 安装自定义工具，Brain 自动发现并注入到角色的工具集中 |
@@ -420,6 +420,9 @@ export MYOPC_TEMPERATURE="0.7"
 | `/tasks` | 列出所有任务 |
 | `/inbox <role>` | 查看角色收件箱 |
 | `/dispatch <role> <desc>` | 手动分发任务到指定角色 |
+| `/resume <workflow_id>` | 继续等待中的工作流 |
+| `/retry <task_id>` | 重试失败任务并保留历史尝试 |
+| `/cancel <workflow_id>` | 终止工作流 |
 | `/skills` | 列出已安装的技能插件 |
 | `/skill install <url>` | 从 GitHub 安装 Skill 插件 |
 | `/skill remove <name>` | 卸载插件 |

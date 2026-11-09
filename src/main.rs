@@ -58,5 +58,12 @@ async fn main() {
         std::process::exit(1);
     }
 
-    myopc::cli::run(MYOPCApp::new(config)).await;
+    let app = match MYOPCApp::new(config) {
+        Ok(app) => app,
+        Err(error) => {
+            eprintln!("Startup error: {error}");
+            std::process::exit(1);
+        }
+    };
+    myopc::cli::run(app).await;
 }

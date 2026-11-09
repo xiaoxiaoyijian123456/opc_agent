@@ -1,14 +1,14 @@
 # Handoff Protocols — 角色交接规范
 
 > 本文件定义角色之间如何交接任务与产出物。Brain 与所有角色 Agent 启动时自动加载。
-> 角色之间不直接对话，所有交接通过 BUS 消息 + `workspace/artifacts/` 文件完成。
+> 角色之间不直接对话，任务状态以 SQLite 为准，产出物由系统写入 `.myopc_agent/.artifacts/`。
 
 ---
 
 ## 1. 交接总原则
 
-1. **单一来源**：上游结论只写进 artifact 文件，下游只读文件，不依赖对话记忆。
-2. **最小上下文**：Brain 分发任务时只摘录下游需要的章节，并标注来源。
+1. **单一来源**：上游结论写入 artifact 和 SQLite 任务结果，orchestrator 将上游结果注入下游任务，不依赖对话记忆。
+2. **明确交接**：orchestrator 在下游任务中标注上游角色输出与原始需求。
 3. **单向推进**：任务按依赖顺序串行分发，下游不得在依赖未完成时开工。
 4. **不改他人产出**：角色只能写自己的 artifact 与代码文件，发现上游问题走 `review_request` 回传。
 5. **有据可查**：每个结论必须能追溯到 PRD 条款或验收标准编号。
@@ -21,10 +21,12 @@
 Boss 指令
   │
   ▼
-[PM] requirement      → workspace/artifacts/{id}_pm.md       （PRD）
+[PM] requirement      → .myopc_agent/.artifacts/{id}_pm.md   （PRD）
   │  审批门：PRD Review
-  ├──────────────▶ [Dev] implement   → {id}_dev.md + code/    （技术方案 + 代码）
-  └──────────────▶ [UI]  design      → {id}_ui.md + code/     （设计规范 / design_system.md）
+  ├──────────────▶ [UI] design（仅 requires_ui=true）→ {id}_ui.md
+  │                     │
+  │                     ▼
+  └──────────────▶ [Dev] implement   → {id}_dev.md + code/    （技术方案 + 代码）
                           │
                           ▼
               [Tester] test_plan     → {id}_tester.md         （测试计划 + 用例 + 结论）
@@ -33,7 +35,7 @@ Boss 指令
               [Admin]  report        → {id}_admin.md          （项目总结归档）
 ```
 
-依赖关系：`Dev`、`UI` 依赖 `PM`；`Tester` 依赖 `Dev`（若 UI 已交付则同时参考）；`Admin` 依赖全部完成。
+依赖关系：`UI` 仅用于视觉任务并依赖 `PM`；`Dev` 依赖前一阶段；`Tester` 依赖 `Dev`；`Admin` 依赖全部完成。PM 必须输出唯一的 `REQUIRES_UI` 与非空 `REQUIRES_UI_REASON`，由 orchestrator 校验。
 
 ---
 
@@ -42,7 +44,7 @@ Boss 指令
 ### 3.1 PM → Dev / UI
 
 必须包含：
-- PRD 全文路径：`workspace/artifacts/{pm_task_id}_pm.md`
+- PRD 全文路径：`.myopc_agent/.artifacts/{pm_task_id}_pm.md`
 - 本次任务的验收标准编号（如 AC-01, AC-03）
 - 范围边界（明确 out-of-scope）
 - 技术或设计约束（若有）

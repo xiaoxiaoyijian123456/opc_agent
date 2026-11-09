@@ -111,11 +111,14 @@ pub fn print_inbox(role: &str, tasks: &[serde_json::Value]) {
 }
 
 pub fn print_help() {
-    let cmds: [(&str, &str); 11] = [
+    let cmds: [(&str, &str); 14] = [
         ("/status", "Show agent status"),
         ("/tasks", "Show task queue"),
         ("/inbox <role>", "View role inbox (pm/dev/ui/tester/admin)"),
         ("/dispatch", "Manually dispatch a task"),
+        ("/resume <workflow_id>", "Resume a pending workflow"),
+        ("/retry <task_id>", "Retry a failed task"),
+        ("/cancel <workflow_id>", "Cancel a workflow"),
         ("/skills", "List available tools"),
         ("/skill list", "List installed skills"),
         ("/skill install <url>", "Install skill from GitHub"),
@@ -133,10 +136,9 @@ pub fn print_help() {
 }
 
 pub fn print_skills(extra_skills: &[(String, String)]) {
-    let builtins: [(&str, &str); 5] = [
-        ("dispatch_task", "Send task to a role"),
+    let builtins: [(&str, &str); 4] = [
+        ("start_workflow", "Start a deterministic role workflow"),
         ("get_project_status", "Get all agent status"),
-        ("execute_role_task", "Run role agent on task"),
         ("run_bash", "Run shell command (requires user approval)"),
         ("ask_user", "Ask user for approval or clarification"),
     ];

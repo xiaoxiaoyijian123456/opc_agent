@@ -112,7 +112,22 @@ impl AgentRunner {
         let Some(task) = self.bus.claim(role, task_id) else {
             return format!("No task {task_id} in {role} inbox");
         };
+        match self.execute_task(&task).await {
+            Ok(execution) => {
+                self.bus.complete(role, task_id, &execution.summary);
+                execution.summary
+            }
+            Err(error) => {
+                let error_text = format!("ERROR: {error}");
+                self.bus.complete(role, task_id, &error_text);
+                error_text
+            }
+        }
+    }
 
+    pub async fn execute_task(&self, task: &Task) -> Result<AgentExecution, String> {
+        let role = task.to.as_str();
+        let task_id = task.id.as_str();
         let team_root = self.team_root();
         let artifact_dir = artifact_root(&team_root);
         let artifact_path = artifact_dir.join(format!("{task_id}_{role}.md"));
@@ -122,28 +137,35 @@ impl AgentRunner {
             .unwrap_or_else(|_| artifact_path.to_string_lossy().into_owned());
 
         let system = self.identity.build_system_prompt(role);
+        let prd_protocol = if task.msg_type == "requirement" {
+            "\n\nPRD response protocol: your final response must contain exactly one `REQUIRES_UI: true` or `REQUIRES_UI: false` line, followed by one `REQUIRES_UI_REASON: <non-empty reason>` line. Do not omit these lines."
+        } else {
+            ""
+        };
         let user_msg = format!(
-            "Task ID: {task_id}\nArtifact path: {artifact_rel} (written automatically by the system after you finish)\nIf you mention the artifact in your output, use exactly the path above. Do not invent a different filename or path.\n\nTask: {}\n\n{}",
+            "Task ID: {task_id}\nArtifact path: {artifact_rel} (written automatically by the system after you finish)\nIf you mention the artifact in your output, use exactly the path above. Do not invent a different filename or path.\n\nTask: {}\n\n{}{prd_protocol}",
             task.title, task.content
         );
 
         let result = match self.run_role(role, &system, &user_msg).await {
             Ok(r) => r,
-            Err(e) => {
-                let error_text = format!("ERROR: {e}");
-                self.bus.complete(role, task_id, &error_text);
-                self.write_reflection(role, task_id, &task, &error_text);
-                return format!("Agent {role} failed: {e}");
+            Err(error) => {
+                let error_text = format!("ERROR: {error}");
+                self.write_reflection(role, task_id, task, &error_text);
+                return Err(format!("Agent {role} failed: {error}"));
             }
         };
 
-        std::fs::create_dir_all(&artifact_dir).ok();
+        std::fs::create_dir_all(&artifact_dir)
+            .map_err(|error| format!("Cannot create artifact directory: {error}"))?;
         let mut artifact_content = result.text.clone();
         if !result.files.is_empty() {
             let file_list: Vec<String> = result.files.iter().map(|f| format!("- {f}")).collect();
             artifact_content.push_str(&format!("\n\n## Files Written\n{}", file_list.join("\n")));
         }
-        std::fs::write(&artifact_path, artifact_content).ok();
+        std::fs::write(&artifact_path, artifact_content).map_err(|error| {
+            format!("Cannot write artifact {}: {error}", artifact_path.display())
+        })?;
 
         let summary: String = result.text.chars().take(200).collect();
         let summary = if result.text.chars().count() > 200 {
@@ -151,11 +173,14 @@ impl AgentRunner {
         } else {
             summary
         };
-        self.bus.complete(role, task_id, &summary);
         if result.text.starts_with("ERROR") {
-            self.write_reflection(role, task_id, &task, &result.text);
+            self.write_reflection(role, task_id, task, &result.text);
         }
-        summary
+        Ok(AgentExecution {
+            text: result.text,
+            summary,
+            artifact_path: artifact_rel,
+        })
     }
 
     async fn run_role(
@@ -350,6 +375,13 @@ impl AgentRunner {
 struct RunResult {
     text: String,
     files: Vec<String>,
+}
+
+#[derive(Clone, Debug)]
+pub struct AgentExecution {
+    pub text: String,
+    pub summary: String,
+    pub artifact_path: String,
 }
 
 fn agent_tool_def(name: &str) -> ToolDef {

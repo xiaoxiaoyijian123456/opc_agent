@@ -1,10 +1,13 @@
-use crate::agent_runner::{artifact_root, normalize_path, AgentRunner, ToolExecutor};
+use crate::agent_runner::{normalize_path, AgentRunner, ToolExecutor};
 use crate::brain::Brain;
-use crate::bus::{Bus, DispatchOpts};
+use crate::bus::Bus;
 use crate::config::{team_root_path, validate_config, Config};
 use crate::identity::IdentityEngine;
+use crate::instance_lock::InstanceLock;
 use crate::llm::{HttpLlm, LlmBackend};
+use crate::orchestrator::{CliPrdApproval, Orchestrator};
 use crate::skill_loader::SkillLoader;
+use crate::task_store::TaskStore;
 use crate::tools;
 use crate::ui;
 use colored::Colorize;
@@ -16,22 +19,14 @@ use std::time::{Duration, Instant};
 use tokio::sync::Mutex;
 
 #[derive(Clone)]
-struct DoneTask {
-    role: String,
-    title: String,
-    summary: String,
-    artifact: String,
-}
-
-#[derive(Clone)]
 pub struct MYOPCApp {
     config: Config,
-    bus: Bus,
     identity: IdentityEngine,
     skills: SkillLoader,
-    runner: Arc<Mutex<AgentRunner>>,
     brain: Arc<Mutex<Brain>>,
-    done_queue: Arc<Mutex<Vec<DoneTask>>>,
+    store: TaskStore,
+    orchestrator: Arc<Orchestrator>,
+    _instance_lock: Arc<InstanceLock>,
 }
 
 fn run_with_timeout(mut child: std::process::Child, timeout: Duration) -> (i32, String, String) {
@@ -63,11 +58,19 @@ fn run_with_timeout(mut child: std::process::Child, timeout: Duration) -> (i32, 
 }
 
 impl MYOPCApp {
-    pub fn new(config: Config) -> MYOPCApp {
+    pub fn new(config: Config) -> Result<MYOPCApp, String> {
         let root = team_root_path(&config);
         let workspace = root.join("workspace");
         std::fs::create_dir_all(&workspace).ok();
 
+        let instance_lock = Arc::new(InstanceLock::acquire(&root)?);
+        let store = TaskStore::open(&root)?;
+        let recovered = store.recover_active()?;
+        if recovered > 0 {
+            ui::print_error(&format!(
+                "  ⚠ Marked {recovered} interrupted task(s) as failed. Use /tasks and /retry <task_id>."
+            ));
+        }
         let bus = Bus::new(&root);
         let identity = IdentityEngine::new(&root);
         let skills = SkillLoader::new(&root.join("skills"));
@@ -91,6 +94,12 @@ impl MYOPCApp {
         ));
         std::fs::create_dir_all(&code_root).ok();
         runner.code_root = Some(code_root);
+        let runner = Arc::new(Mutex::new(runner));
+        let orchestrator = Arc::new(Orchestrator::new(
+            store.clone(),
+            runner,
+            Arc::new(CliPrdApproval),
+        ));
 
         let errors = validate_config(&config);
         ui::print_welcome(
@@ -104,93 +113,49 @@ impl MYOPCApp {
         for error in &errors {
             ui::print_error(&format!("  ⚠ {error}"));
         }
+        for workflow in store.unfinished_workflows()? {
+            println!(
+                "  Unfinished workflow {}: {} (current task: {})",
+                workflow.id,
+                workflow.status,
+                workflow.current_task_id.as_deref().unwrap_or("none")
+            );
+        }
 
-        MYOPCApp {
+        Ok(MYOPCApp {
             config,
-            bus,
             identity,
             skills,
-            runner: Arc::new(Mutex::new(runner)),
             brain: Arc::new(Mutex::new(brain)),
-            done_queue: Arc::new(Mutex::new(Vec::new())),
-        }
+            store,
+            orchestrator,
+            _instance_lock: instance_lock,
+        })
     }
 
     async fn execute_tool(&self, name: &str, args: &Value) -> String {
         let root = team_root_path(&self.config);
         match name {
-            "dispatch_task" => {
+            "start_workflow" => {
                 let state = self.identity.read_intervention();
                 if state == "STOP" {
                     ui::print_intervention_block("STOP");
-                    return "BLOCKED: Intervention state is STOP. All dispatches halted.".into();
+                    return "BLOCKED: Intervention state is STOP. All workflows halted.".into();
                 }
-                if state == "PAUSE" {
-                    ui::print_intervention_block("PAUSE");
-                    ui::print_deepthink_question(
-                        "brain",
-                        &format!(
-                            "Dispatch to {}: {} — approve? (y/n)",
-                            args["role"].as_str().unwrap_or(""),
-                            args["title"].as_str().unwrap_or("")
-                        ),
-                    );
-                    let answer = ui::prompt_user_answer().to_lowercase();
-                    if !["y", "yes", "ok", "approve"].contains(&answer.as_str()) {
-                        return format!(
-                            "BLOCKED: User did not approve dispatch. Response: {answer}"
-                        );
-                    }
-                }
-
-                let mut ctx = serde_json::Map::new();
-                if let Some(d) = args.get("depends_on") {
-                    ctx.insert("depends_on".into(), d.clone());
-                }
-                if let Some(a) = args.get("artifacts") {
-                    ctx.insert("artifacts".into(), a.clone());
-                }
-                let context = if ctx.is_empty() {
-                    None
-                } else {
-                    Some(Value::Object(ctx))
-                };
-                let role = args["role"].as_str().unwrap_or("").to_string();
-                let title = args["title"].as_str().unwrap_or("").to_string();
-                let content = args["content"].as_str().unwrap_or("").to_string();
-                let msg_type = args["msg_type"].as_str().unwrap_or("").to_string();
-                let task = self.bus.dispatch(
-                    &role,
-                    &title,
-                    &content,
-                    DispatchOpts {
-                        from_role: None,
-                        msg_type: Some(msg_type),
-                        context,
-                    },
-                );
-                ui::print_agent_working(&role, &title);
-                serde_json::to_string(&task).unwrap_or_default()
-            }
-
-            "get_project_status" => {
-                let status = self.bus.get_all_status();
-                ui::print_status(&status);
-                serde_json::to_string(&status).unwrap_or_default()
-            }
-
-            "execute_role_task" => {
-                let role = args["role"].as_str().unwrap_or("").to_string();
-                let task_id = args["task_id"].as_str().unwrap_or("").to_string();
-                if crate::agent_runner::has_sync_tool(&role) {
-                    let summary = self.runner.lock().await.run(&role, &task_id).await;
-                    ui::print_agent_done(&role, &summary);
-                    summary
-                } else {
-                    self.run_in_background(&role, &task_id);
-                    format!("Task {task_id} started in background for {role}. You'll be notified when done.")
+                let request = args["request"].as_str().unwrap_or("");
+                match self.orchestrator.start(request).await {
+                    Ok(workflow) => serde_json::to_string(&workflow).unwrap_or_default(),
+                    Err(error) => format!("ERROR: {error}"),
                 }
             }
+
+            "get_project_status" => match self.store.status() {
+                Ok(status) => {
+                    ui::print_status(&status);
+                    serde_json::to_string(&status).unwrap_or_default()
+                }
+                Err(error) => format!("ERROR: {error}"),
+            },
 
             "ask_user" => {
                 let question = args["question"].as_str().unwrap_or("").to_string();
@@ -237,45 +202,6 @@ impl MYOPCApp {
             }
 
             _ => format!("Unknown tool: {name}"),
-        }
-    }
-
-    fn run_in_background(&self, role: &str, task_id: &str) {
-        let runner = self.runner.clone();
-        let queue = self.done_queue.clone();
-        let config = self.config.clone();
-        let bus = self.bus.clone();
-        let role = role.to_string();
-        let task_id = task_id.to_string();
-        ui::print_agent_working(&role, &format!("{task_id} (background)"));
-        tokio::spawn(async move {
-            let done = {
-                let r = runner.lock().await;
-                let summary = r.run(&role, &task_id).await;
-                let root = team_root_path(&config);
-                let artifact = artifact_root(&root).join(format!("{task_id}_{role}.md"));
-                let title = bus
-                    .list_active(&role)
-                    .iter()
-                    .find(|t| t.id == task_id)
-                    .map(|t| t.title.clone())
-                    .unwrap_or_else(|| task_id.clone());
-                DoneTask {
-                    role,
-                    title,
-                    summary,
-                    artifact: artifact.to_string_lossy().into_owned(),
-                }
-            };
-            queue.lock().await.push(done);
-        });
-    }
-
-    pub(crate) async fn drain_notifications(&self) {
-        let mut queue = self.done_queue.lock().await;
-        while !queue.is_empty() {
-            let done = queue.remove(0);
-            ui::print_task_notification(&done.role, &done.title, &done.summary, &done.artifact);
         }
     }
 
@@ -329,38 +255,29 @@ impl MYOPCApp {
 
         match command.as_str() {
             "/exit" => return true,
-            "/status" => {
-                let status = self.bus.get_all_status();
-                ui::print_status(&status);
-            }
-            "/tasks" => {
-                let mut all: Vec<Value> = Vec::new();
-                for role in crate::bus::ROLES {
-                    all.extend(
-                        self.bus
-                            .list_inbox(role)
-                            .iter()
-                            .map(|t| serde_json::to_value(t).unwrap_or(Value::Null)),
-                    );
-                    all.extend(
-                        self.bus
-                            .list_active(role)
-                            .iter()
-                            .map(|t| serde_json::to_value(t).unwrap_or(Value::Null)),
-                    );
+            "/status" => match self.store.status() {
+                Ok(status) => ui::print_status(&status),
+                Err(error) => ui::print_error(&error),
+            },
+            "/tasks" => match self.store.list_tasks() {
+                Ok(tasks) => {
+                    let values = tasks.iter().map(|task| task.as_value()).collect::<Vec<_>>();
+                    ui::print_tasks(&values);
                 }
-                ui::print_tasks(&all);
-            }
+                Err(error) => ui::print_error(&error),
+            },
             "/inbox" => {
                 if arg.is_empty() {
                     ui::print_error("Usage: /inbox <role>");
                 } else {
-                    let tasks = self.bus.list_inbox(&arg);
-                    let values: Vec<Value> = tasks
-                        .iter()
-                        .map(|t| serde_json::to_value(t).unwrap_or(Value::Null))
-                        .collect();
-                    ui::print_inbox(&arg, &values);
+                    match self.store.list_inbox(&arg) {
+                        Ok(tasks) => {
+                            let values =
+                                tasks.iter().map(|task| task.as_value()).collect::<Vec<_>>();
+                            ui::print_inbox(&arg, &values);
+                        }
+                        Err(error) => ui::print_error(&error),
+                    }
                 }
             }
             "/skills" => {
@@ -384,11 +301,44 @@ impl MYOPCApp {
                         if desc.is_empty() {
                             ui::print_error("Usage: /dispatch <role> <task description>");
                         } else {
-                            let task =
-                                self.bus
-                                    .dispatch(role, &desc, &desc, DispatchOpts::default());
-                            println!("Dispatched [{}] to {role}", task.id);
+                            match self.store.create_manual(role, &desc) {
+                                Ok((workflow, task)) => println!(
+                                    "Dispatched [{}] to {role}. Run /resume {} to execute.",
+                                    task.id, workflow.id
+                                ),
+                                Err(error) => ui::print_error(&error),
+                            }
                         }
+                    }
+                }
+            }
+            "/resume" => {
+                if arg.is_empty() {
+                    ui::print_error("Usage: /resume <workflow_id>");
+                } else {
+                    match self.orchestrator.resume(&arg).await {
+                        Ok(workflow) => println!("Workflow {}: {}", workflow.id, workflow.status),
+                        Err(error) => ui::print_error(&error),
+                    }
+                }
+            }
+            "/retry" => {
+                if arg.is_empty() {
+                    ui::print_error("Usage: /retry <task_id>");
+                } else {
+                    match self.orchestrator.retry(&arg).await {
+                        Ok(workflow) => println!("Workflow {}: {}", workflow.id, workflow.status),
+                        Err(error) => ui::print_error(&error),
+                    }
+                }
+            }
+            "/cancel" => {
+                if arg.is_empty() {
+                    ui::print_error("Usage: /cancel <workflow_id>");
+                } else {
+                    match self.orchestrator.cancel(&arg) {
+                        Ok(workflow) => println!("Workflow {}: {}", workflow.id, workflow.status),
+                        Err(error) => ui::print_error(&error),
                     }
                 }
             }

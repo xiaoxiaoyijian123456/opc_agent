@@ -11,7 +11,6 @@ pub async fn run(app: MYOPCApp) {
     };
 
     loop {
-        app.drain_notifications().await;
         match readline.readline("myopc > ") {
             Ok(line) => {
                 readline.add_history_entry(line.as_str()).ok();
