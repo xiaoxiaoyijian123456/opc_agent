@@ -1,5 +1,5 @@
 <p align="center">
-  <h1 align="center">OPC</h1>
+  <h1 align="center">MYOPC</h1>
   <p align="center"><strong>One Person Company</strong></p>
   <p align="center">
     Your AI-powered virtual team. Five agents, one command line, zero hiring.
@@ -10,7 +10,7 @@
 </p>
 
 <p align="center">
-  <a href="https://www.npmjs.com/package/opc-cli"><img src="https://img.shields.io/npm/v/opc-cli?color=blue&label=npm" alt="npm"></a>
+  <a href="https://www.npmjs.com/package/myopc-cli"><img src="https://img.shields.io/npm/v/myopc-cli?color=blue&label=npm" alt="npm"></a>
   <a href="https://github.com/CroTuyuzhe/opc_agent/blob/main/LICENSE"><img src="https://img.shields.io/badge/license-Apache%202.0-green" alt="license"></a>
   <img src="https://img.shields.io/badge/node-%3E%3D18-brightgreen" alt="node">
   <img src="https://img.shields.io/badge/LLM-OpenAI%20%7C%20Anthropic-purple" alt="LLM">
@@ -18,7 +18,7 @@
 
 ---
 
-OPC 是一个运行在终端里的 **AI 多智能体协作框架**。你只需要一句话描述需求，OPC 会自动拆解任务，分配给 5 个专业角色 Agent，像一支真实团队一样协作完成：需求分析、技术实现、UI 设计、质量测试、项目管理。
+MYOPC 是一个运行在终端里的 **AI 多智能体协作框架**。你只需要一句话描述需求，MYOPC 会自动拆解任务，分配给 5 个专业角色 Agent，像一支真实团队一样协作完成：需求分析、技术实现、UI 设计、质量测试、项目管理。
 
 > *"我想做一个网页贪吃蛇小游戏"*
 >
@@ -26,7 +26,7 @@ OPC 是一个运行在终端里的 **AI 多智能体协作框架**。你只需�
 
 ---
 
-## Why OPC
+## Why MYOPC
 
 **🏢 一个人就是一家公司** — 不用招人，不用开会。5 个 AI 角色各司其职，你是 Boss，做决策就好。
 
@@ -55,7 +55,7 @@ OPC 是一个运行在终端里的 **AI 多智能体协作框架**。你只需�
                                          │ dispatch
                                          ▼
                ┌─────────────────────────────────────────────────┐
-               │   📬 Bus  ·  .opc_agent/communication/           │
+               │   📬 Bus  ·  .myopc_agent/communication/           │
                │                                                  │
                │   inbox/ (待处理) → active/ (执行中) → archive/   │
                └──┬──────────┬──────────┬──────────┬──────────┬──┘
@@ -71,7 +71,7 @@ OPC 是一个运行在终端里的 **AI 多智能体协作框架**。你只需�
                  │          │          │          │          │
                  ▼          ▼          ▼          ▼          ▼
             ┌─────────────────────────────────────────────────────┐
-            │      📁 .opc_agent/.artifacts/                       │
+            │      📁 .myopc_agent/.artifacts/                       │
             │                                                     │
             │   {id}_pm.md    PRD 需求文档                         │
             │   {id}_dev.md   技术方案 + 代码文件                    │
@@ -81,7 +81,7 @@ OPC 是一个运行在终端里的 **AI 多智能体协作框架**。你只需�
             └─────────────────────────────────────────────────────┘
 ```
 
-> 图中 `communication/`、`workspace/`、`staff/`、`memory_center/`、`skills/`、`.artifacts/` 等内部路径均位于项目根目录的 `.opc_agent/` 下。
+> 图中 `communication/`、`workspace/`、`staff/`、`memory_center/`、`skills/`、`.artifacts/` 等内部路径均位于项目根目录的 `.myopc_agent/` 下。
 
 ### 核心设计
 
@@ -100,7 +100,7 @@ OPC 是一个运行在终端里的 **AI 多智能体协作框架**。你只需�
 ### 安装
 
 ```bash
-npm install -g opc-cli
+npm install -g myopc-cli
 ```
 
 > 需要 Node.js 18+
@@ -109,15 +109,15 @@ npm install -g opc-cli
 
 ```bash
 mkdir my-startup && cd my-startup
-opc init
+myopc init
 ```
 
-初始化后，项目根目录下只会多出一个隐藏目录 `.opc_agent/`，所有内部文件（团队协议、角色人设、消息总线、工作区、记忆库、配置）都收纳在里面：
+初始化后，项目根目录下只会多出一个隐藏目录 `.myopc_agent/`，所有内部文件（团队协议、角色人设、消息总线、工作区、记忆库、配置）都收纳在里面：
 
 ```
 my-startup/
-└── .opc_agent/          ← 所有 OPC 内部文件
-    ├── opc.json
+└── .myopc_agent/          ← 所有 MYOPC 内部文件
+    ├── myopc.json
     ├── AGENTS.md
     ├── staff/
     ├── communication/
@@ -125,13 +125,13 @@ my-startup/
     └── memory_center/
 ```
 
-`opc init` 会把 `code_root` 设为 `"."`——无论目录是否为空，**当前目录就是代码所在目录**，所有生成的代码直接写到这里；Brain 不会调用 `create_project`。重复执行不会覆盖任何已有文件。
+`myopc init` 会把 `code_root` 设为 `"."`——无论目录是否为空，**当前目录就是代码所在目录**，所有生成的代码直接写到这里；Brain 不会调用 `create_project`。重复执行不会覆盖任何已有文件。
 
-> 想改用「多项目」布局（代码放到 `workspace/{project}/code`），删除 `opc.json` 里的 `code_root` 字段后重新执行 `opc init` 即可。
+> 想改用「多项目」布局（代码放到 `workspace/{project}/code`），删除 `myopc.json` 里的 `code_root` 字段后重新执行 `myopc init` 即可。
 
 ### 配置 API Key
 
-编辑 `.opc_agent/opc.json`：
+编辑 `.myopc_agent/myopc.json`：
 
 ```json
 {
@@ -139,7 +139,7 @@ my-startup/
     "api_key": "sk-your-api-key",
     "base_url": "https://api.openai.com/v1",
     "default_model": "gpt-4o",
-    "team_root": ".opc_agent",
+    "team_root": ".myopc_agent",
     "max_tokens": 8192,
     "temperature": 0.7
 }
@@ -155,7 +155,7 @@ opc
 
 ```
 ┌──────────────────────────────────────┐
-│ OPC Team Agent v0.1                  │
+│ MYOPC Team Agent v0.1                  │
 │                                      │
 │   Provider   : openai                │
 │   Model      : gpt-4o               │
@@ -166,7 +166,7 @@ opc
 │   /help for commands, /exit to quit  │
 └──────────────────────────────────────┘
 
-opc > 做一个网页贪吃蛇小游戏
+myopc > 做一个网页贪吃蛇小游戏
 ```
 
 ### 交互示例
@@ -190,19 +190,19 @@ opc > 做一个网页贪吃蛇小游戏
     (2) 触屏滑动
     (3) 键盘 + 触屏都要  ← 你选了这个
 
-  ✅ PM 产出 PRD → .opc_agent/.artifacts/a1b2c3d4_pm.md
+  ✅ PM 产出 PRD → .myopc_agent/.artifacts/a1b2c3d4_pm.md
 
 💻 Dev 开始执行任务 [b2c3d4e5]
   📝 写入 code/index.html
   📝 写入 code/game.js
   📝 写入 code/style.css
-  ✅ Dev 完成 → .opc_agent/.artifacts/b2c3d4e5_dev.md
+  ✅ Dev 完成 → .myopc_agent/.artifacts/b2c3d4e5_dev.md
 
-🎨 UI 产出设计规范 → .opc_agent/.artifacts/c3d4e5f6_ui.md
-🧪 Tester 产出测试报告 → .opc_agent/.artifacts/d4e5f6g7_tester.md
-📊 Admin 产出项目总结 → .opc_agent/.artifacts/e5f6g7h8_admin.md
+🎨 UI 产出设计规范 → .myopc_agent/.artifacts/c3d4e5f6_ui.md
+🧪 Tester 产出测试报告 → .myopc_agent/.artifacts/d4e5f6g7_tester.md
+📊 Admin 产出项目总结 → .myopc_agent/.artifacts/e5f6g7h8_admin.md
 
-✅ 所有任务完成，产出物在 .opc_agent/.artifacts/ 目录下
+✅ 所有任务完成，产出物在 .myopc_agent/.artifacts/ 目录下
 ```
 
 ---
@@ -283,12 +283,12 @@ Brain 在关键节点会暂停，等你确认：
 
 ## 项目结构
 
-`opc init` 后生成的目录（全部收纳在项目根目录的 `.opc_agent/` 下）：
+`myopc init` 后生成的目录（全部收纳在项目根目录的 `.myopc_agent/` 下）：
 
 ```
 my-startup/
-└── .opc_agent/
-    ├── opc.json                      ← 配置文件
+└── .myopc_agent/
+    ├── myopc.json                      ← 配置文件
     ├── AGENTS.md                     ← 团队协议（所有角色自动加载）
     ├── boundary.md                   ← 安全红线
     │
@@ -329,9 +329,9 @@ my-startup/
 
 ## 配置
 
-### opc.json
+### myopc.json
 
-位于 `.opc_agent/opc.json`：
+位于 `.myopc_agent/myopc.json`：
 
 ```json
 {
@@ -339,7 +339,7 @@ my-startup/
     "api_key": "sk-your-api-key",
     "base_url": "https://api.openai.com/v1",
     "default_model": "gpt-4o",
-    "team_root": ".opc_agent",
+    "team_root": ".myopc_agent",
     "max_tokens": 8192,
     "temperature": 0.7
 }
@@ -359,17 +359,17 @@ my-startup/
 ### 环境变量
 
 ```bash
-export OPC_API_KEY="sk-your-api-key"
-export OPC_PROVIDER="openai"
-export OPC_MODEL="gpt-4o"
-export OPC_BASE_URL="https://api.openai.com/v1"
-export OPC_TEAM_ROOT=".opc_agent"
-export OPC_CODE_ROOT="."
-export OPC_MAX_TOKENS="8192"
-export OPC_TEMPERATURE="0.7"
+export MYOPC_API_KEY="sk-your-api-key"
+export MYOPC_PROVIDER="openai"
+export MYOPC_MODEL="gpt-4o"
+export MYOPC_BASE_URL="https://api.openai.com/v1"
+export MYOPC_TEAM_ROOT=".myopc_agent"
+export MYOPC_CODE_ROOT="."
+export MYOPC_MAX_TOKENS="8192"
+export MYOPC_TEMPERATURE="0.7"
 ```
 
-优先级：**环境变量** > 当前目录 `opc.json` > `.opc_agent/opc.json` > `~/.opc/opc.json`
+优先级：**环境变量** > 当前目录 `myopc.json` > `.myopc_agent/myopc.json` > `~/.myopc/myopc.json`
 
 ### 使用其他 LLM
 
@@ -416,7 +416,7 @@ export OPC_TEMPERATURE="0.7"
 
 | 命令 | 说明 |
 |------|------|
-| `opc init` | 初始化团队项目目录 |
+| `myopc init` | 初始化团队项目目录 |
 | `opc` | 启动交互式终端 |
 | `/help` | 显示帮助信息 |
 | `/status` | 查看各角色状态（idle / working / queued） |
@@ -436,7 +436,7 @@ export OPC_TEMPERATURE="0.7"
 ### 安装
 
 ```
-opc > /skill install https://github.com/user/my-skill
+myopc > /skill install https://github.com/user/my-skill
 ```
 
 ### 开发自定义 Skill
@@ -479,6 +479,6 @@ Brain 会自动发现已安装的 Skill，并在合适的时机让角色调用�
 ---
 
 <p align="center">
-  <strong>OPC — One Person Company</strong><br>
+  <strong>MYOPC — My One Person Company</strong><br>
   <em>一个人的公司，AI 驱动的团队。</em>
 </p>

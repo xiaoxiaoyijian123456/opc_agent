@@ -42,11 +42,11 @@ async function setup() {
   fs.removeSync(TEST_DIR);
   fs.ensureDirSync(TEST_DIR);
 
-  // Run opc init to scaffold the test directory
+  // Run myopc init to scaffold the test directory
   const { initProject } = await import('../src/init.js');
   // Temporarily redirect scaffold root — init reads from dist/../scaffold
   // So we run it via the compiled init or just copy scaffold manually
-  const scaffoldSrc = path.join(PROJECT_ROOT, 'scaffold');
+  const scaffoldSrc = path.join(PROJECT_ROOT, '..', 'scaffold');
   const allFiles = getAllFiles(scaffoldSrc);
   for (const srcFile of allFiles) {
     const rel = path.relative(scaffoldSrc, srcFile);
@@ -67,8 +67,8 @@ async function setup() {
   fs.ensureDirSync(path.join(TEST_DIR, 'memory_center', 'archive'));
   fs.ensureDirSync(path.join(TEST_DIR, 'memory_center', 'project_history'));
 
-  // Write a minimal opc.json
-  fs.writeJsonSync(path.join(TEST_DIR, 'opc.json'), {
+  // Write a minimal myopc.json
+  fs.writeJsonSync(path.join(TEST_DIR, 'myopc.json'), {
     provider: 'openai',
     api_key: 'mock-key',
     base_url: 'http://localhost:0',
@@ -572,7 +572,7 @@ async function testReflection() {
 
 // ── Run ──────────────────────────────────────────────────────
 async function main() {
-  console.log('🚀 OPC Mock E2E Test\n');
+  console.log('🚀 MYOPC Mock E2E Test\n');
   console.log(`Test dir: ${TEST_DIR}`);
 
   await setup();

@@ -1,16 +1,16 @@
 [package]
-name = "opc-cli"
+name = "myopc"
 version = "0.1.0"
 edition = "2021"
-description = "OPC - AI multi-agent team orchestrator CLI"
+description = "myopc - My AI multi-agent team orchestrator CLI"
 license = "Apache-2.0"
 
 [[bin]]
-name = "opc"
+name = "myopc"
 path = "src/main.rs"
 
 [lib]
-name = "opc"
+name = "myopc"
 path = "src/lib.rs"
 
 [dependencies]

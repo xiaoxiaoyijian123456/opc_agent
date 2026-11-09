@@ -1,11 +1,11 @@
-use opc::agent_runner::AgentRunner;
-use opc::bus::{Bus, DispatchOpts};
-use opc::config::Config;
-use opc::identity::IdentityEngine;
-use opc::init::init_project;
-use opc::llm::{LlmBackend, LlmResponse, Msg, ToolCallMsg};
-use opc::skill_loader::SkillLoader;
-use opc::tools::ToolDef;
+use myopc::agent_runner::AgentRunner;
+use myopc::bus::{Bus, DispatchOpts};
+use myopc::config::Config;
+use myopc::identity::IdentityEngine;
+use myopc::init::init_project;
+use myopc::llm::{LlmBackend, LlmResponse, Msg, ToolCallMsg};
+use myopc::skill_loader::SkillLoader;
+use myopc::tools::ToolDef;
 use serde_json::json;
 use std::collections::VecDeque;
 use std::path::PathBuf;
@@ -33,7 +33,7 @@ impl LlmBackend for MockLlm {
 
 fn temp_dir(tag: &str) -> PathBuf {
     let dir = std::env::temp_dir().join(format!(
-        "opc-rust-{}-{}",
+        "myopc-rust-{}-{}",
         tag,
         uuid::Uuid::new_v4().simple().to_string()[..8].to_string()
     ));
@@ -90,7 +90,7 @@ fn identity_system_prompt() {
     let dir = temp_dir("identity");
     init_project(&dir);
 
-    let identity = IdentityEngine::new(&dir.join(".opc_agent"));
+    let identity = IdentityEngine::new(&dir.join(".myopc_agent"));
     let prompt = identity.build_system_prompt("pm");
     assert!(prompt.contains("AGENTS.md") || prompt.contains("PM"));
     assert!(prompt.len() > 100);
@@ -101,7 +101,7 @@ fn identity_system_prompt() {
 #[test]
 fn resolve_write_target_mappings() {
     let dir = temp_dir("wtarget");
-    let team_root = dir.join(".opc_agent");
+    let team_root = dir.join(".myopc_agent");
     std::fs::create_dir_all(&team_root).ok();
     let config = test_config(&team_root);
     let bus = Bus::new(&team_root);
@@ -131,7 +131,7 @@ fn resolve_write_target_mappings() {
     assert_eq!(display, "a.py");
 
     let (full, display) = case("artifacts/x.md").unwrap();
-    assert_eq!(full, dir.join(".opc_agent/.artifacts/x.md"));
+    assert_eq!(full, dir.join(".myopc_agent/.artifacts/x.md"));
     assert_eq!(display, "x.md");
 
     assert!(case("../escape").is_none());
@@ -141,7 +141,7 @@ fn resolve_write_target_mappings() {
     // project-scoped
     let runner = runner_with_project(runner, "p1".to_string());
     let (full, display) = runner.resolve_write_target("artifacts/y.md").unwrap();
-    assert_eq!(full, dir.join(".opc_agent/.artifacts/p1/y.md"));
+    assert_eq!(full, dir.join(".myopc_agent/.artifacts/p1/y.md"));
     assert_eq!(display, "y.md");
 
     let (full, display) = runner.resolve_write_target("p1/src.go").unwrap();
@@ -165,7 +165,7 @@ fn runner_with_project(mut r: AgentRunner, pid: String) -> AgentRunner {
 async fn agent_run_writes_code_and_artifact() {
     let dir = temp_dir("run");
     init_project(&dir);
-    let team_root = dir.join(".opc_agent");
+    let team_root = dir.join(".myopc_agent");
     let code_root = dir.join("code");
 
     let responses: Arc<Mutex<VecDeque<LlmResponse>>> = Arc::new(Mutex::new(VecDeque::from([
@@ -217,22 +217,22 @@ async fn agent_run_writes_code_and_artifact() {
 }
 
 #[test]
-fn init_creates_opc_agent_layout() {
+fn init_creates_myopc_agent_layout() {
     let dir = temp_dir("init");
     init_project(&dir);
 
-    assert!(dir.join(".opc_agent").exists());
-    assert!(dir.join(".opc_agent/AGENTS.md").exists());
-    assert!(dir.join(".opc_agent/opc.json").exists());
-    assert!(dir.join(".opc_agent/.artifacts").exists());
-    assert!(dir.join(".opc_agent/workspace").exists());
-    assert!(dir.join(".opc_agent/communication/bus/pm/inbox").exists());
-    assert!(dir.join(".opc_agent/skills/hello_world/manifest.json").exists());
+    assert!(dir.join(".myopc_agent").exists());
+    assert!(dir.join(".myopc_agent/AGENTS.md").exists());
+    assert!(dir.join(".myopc_agent/myopc.json").exists());
+    assert!(dir.join(".myopc_agent/.artifacts").exists());
+    assert!(dir.join(".myopc_agent/workspace").exists());
+    assert!(dir.join(".myopc_agent/communication/bus/pm/inbox").exists());
+    assert!(dir.join(".myopc_agent/skills/hello_world/manifest.json").exists());
 
-    let opc_json = std::fs::read_to_string(dir.join(".opc_agent/opc.json")).unwrap();
+    let opc_json = std::fs::read_to_string(dir.join(".myopc_agent/myopc.json")).unwrap();
     let v: serde_json::Value = serde_json::from_str(&opc_json).unwrap();
     assert_eq!(v["code_root"].as_str(), Some("."));
-    assert_eq!(v["team_root"].as_str(), Some(".opc_agent"));
+    assert_eq!(v["team_root"].as_str(), Some(".myopc_agent"));
 
     std::fs::remove_dir_all(&dir).ok();
 }
@@ -241,7 +241,7 @@ fn init_creates_opc_agent_layout() {
 fn skill_scan_and_execute() {
     let dir = temp_dir("skill");
     init_project(&dir);
-    let skills = SkillLoader::new(&dir.join(".opc_agent/skills"));
+    let skills = SkillLoader::new(&dir.join(".myopc_agent/skills"));
 
     let tools = skills.scan();
     assert!(tools.iter().any(|t| t.name == "skill_hello_world"));

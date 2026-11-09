@@ -34,7 +34,7 @@ const ROLE_LABEL: Record<string, string> = {
   ui: 'UI',
   tester: 'Test',
   admin: 'Admin',
-  brain: 'OPC',
+  brain: 'MYOPC',
 };
 
 const STATE_ICON: Record<string, string> = {
@@ -45,7 +45,7 @@ const STATE_ICON: Record<string, string> = {
 
 export function printWelcome(configOk: boolean, provider: string, model: string, teamRoot: string, maxTokens?: number, temperature?: number) {
   const lines = [
-    chalk.bold('OPC Team Agent') + ' v0.1',
+    chalk.bold('MYOPC Team Agent') + ' v0.1',
     '',
     `  Provider   : ${chalk.cyan(provider)}`,
     `  Model      : ${chalk.cyan(model)}`,
@@ -101,7 +101,7 @@ export function printHelp() {
     ['/skill install <url>', 'Install skill from GitHub'],
     ['/skill remove <name>', 'Remove a skill'],
     ['/compact', 'Toggle compact output'],
-    ['/uninstall', 'Remove OPC from system'],
+    ['/uninstall', 'Remove MYOPC from system'],
     ['/help', 'This help'],
     ['/exit', 'Quit'],
   ];

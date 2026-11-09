@@ -24,14 +24,14 @@ const DEFAULTS: Config = {
 };
 
 const ENV_MAP: Record<string, keyof Config> = {
-  OPC_API_KEY: 'apiKey',
-  OPC_BASE_URL: 'baseUrl',
-  OPC_MODEL: 'defaultModel',
-  OPC_PROVIDER: 'provider',
-  OPC_TEAM_ROOT: 'teamRoot',
-  OPC_CODE_ROOT: 'codeRoot',
-  OPC_MAX_TOKENS: 'maxTokens',
-  OPC_TEMPERATURE: 'temperature',
+  MYOPC_API_KEY: 'apiKey',
+  MYOPC_BASE_URL: 'baseUrl',
+  MYOPC_MODEL: 'defaultModel',
+  MYOPC_PROVIDER: 'provider',
+  MYOPC_TEAM_ROOT: 'teamRoot',
+  MYOPC_CODE_ROOT: 'codeRoot',
+  MYOPC_MAX_TOKENS: 'maxTokens',
+  MYOPC_TEMPERATURE: 'temperature',
 };
 
 function loadJson(filePath: string): Partial<Config> {
@@ -67,9 +67,9 @@ function envOverrides(): Partial<Config> {
 }
 
 export function loadConfig(): Config {
-  const globalCfg = loadJson(path.join(process.env.HOME || '~', '.opc', 'opc.json'));
-  const hiddenCfg = loadJson(path.join(process.cwd(), '.opc_agent', 'opc.json'));
-  const localCfg = loadJson(path.join(process.cwd(), 'opc.json'));
+  const globalCfg = loadJson(path.join(process.env.HOME || '~', '.myopc', 'myopc.json'));
+  const hiddenCfg = loadJson(path.join(process.cwd(), '.myopc_agent', 'myopc.json'));
+  const localCfg = loadJson(path.join(process.cwd(), 'myopc.json'));
   const env = envOverrides();
 
   return { ...DEFAULTS, ...globalCfg, ...hiddenCfg, ...localCfg, ...env };

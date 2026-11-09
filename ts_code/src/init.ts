@@ -16,10 +16,10 @@ const RUNTIME_DIRS = [
 
 function scaffoldRoot(): string {
   const __dirname = path.dirname(fileURLToPath(import.meta.url));
-  return path.join(__dirname, '..', 'scaffold');
+  return path.join(__dirname, '..', '..', 'scaffold');
 }
 
-export const TEAM_DIR = '.opc_agent';
+export const TEAM_DIR = '.myopc_agent';
 
 export function initProject(target: string) {
   const projectDir = path.resolve(target);
@@ -47,12 +47,12 @@ export function initProject(target: string) {
     created.push(rel);
   }
 
-  const opcJson = path.join(targetRoot, 'opc.json');
+  const opcJson = path.join(targetRoot, 'myopc.json');
   if (!fs.existsSync(opcJson)) {
-    const example = path.join(targetRoot, 'opc.json.example');
+    const example = path.join(targetRoot, 'myopc.json.example');
     if (fs.existsSync(example)) {
       fs.copyFileSync(example, opcJson);
-      created.push('opc.json');
+      created.push('myopc.json');
     }
   }
 
@@ -68,7 +68,7 @@ export function initProject(target: string) {
     }
   }
 
-  console.log(`\n${chalk.bold.green(`OPC initialized in ${targetRoot}`)}\n`);
+  console.log(`\n${chalk.bold.green(`MYOPC initialized in ${targetRoot}`)}\n`);
   console.log(`  ${chalk.dim(`Code root: "." — generated code will be written into this directory`)}\n`);
   if (created.length > 0) {
     for (const f of created) {
@@ -79,8 +79,8 @@ export function initProject(target: string) {
     console.log(`\n  ${chalk.dim(`${skipped.length} existing files unchanged`)}`);
   }
   console.log(`\n${chalk.bold('Next steps:')}`);
-  console.log(`  1. Edit ${chalk.cyan(path.join(TEAM_DIR, 'opc.json'))} — set your api_key`);
-  console.log(`  2. Run ${chalk.cyan('opc')} to start\n`);
+  console.log(`  1. Edit ${chalk.cyan(path.join(TEAM_DIR, 'myopc.json'))} — set your api_key`);
+  console.log(`  2. Run ${chalk.cyan('myopc')} to start\n`);
 }
 
 function setCodeRoot(opcJson: string, codeRoot: string) {

@@ -1,14 +1,14 @@
 use colored::Colorize;
-use opc::agent_runner::{normalize_path, AgentRunner, ToolExecutor};
-use opc::brain::Brain;
-use opc::bus::{Bus, DispatchOpts};
-use opc::config::{team_root_path, validate_config, Config};
-use opc::identity::IdentityEngine;
-use opc::init::init_project;
-use opc::llm::{HttpLlm, LlmBackend};
-use opc::skill_loader::SkillLoader;
-use opc::tools;
-use opc::ui;
+use myopc::agent_runner::{normalize_path, AgentRunner, ToolExecutor};
+use myopc::brain::Brain;
+use myopc::bus::{Bus, DispatchOpts};
+use myopc::config::{team_root_path, validate_config, Config};
+use myopc::identity::IdentityEngine;
+use myopc::init::init_project;
+use myopc::llm::{HttpLlm, LlmBackend};
+use myopc::skill_loader::SkillLoader;
+use myopc::tools;
+use myopc::ui;
 use rustyline::error::ReadlineError;
 use serde_json::Value;
 use std::path::{Path, PathBuf};
@@ -28,7 +28,7 @@ struct DoneTask {
 }
 
 #[derive(Clone)]
-pub struct OPCApp {
+pub struct MYOPCApp {
     config: Config,
     bus: Bus,
     identity: IdentityEngine,
@@ -67,10 +67,10 @@ fn run_with_timeout(mut child: std::process::Child, timeout: Duration) -> (i32, 
     }
 }
 
-impl OPCApp {
-    pub fn new() -> OPCApp {
+impl MYOPCApp {
+    pub fn new() -> MYOPCApp {
         let placeholder = PathBuf::from(".");
-        OPCApp {
+        MYOPCApp {
             config: Config {
                 provider: "openai".into(),
                 api_key: String::new(),
@@ -121,7 +121,7 @@ impl OPCApp {
     }
 
     pub fn init(&mut self) {
-        self.config = opc::config::load_config();
+        self.config = myopc::config::load_config();
         let root = team_root_path(&self.config);
 
         self.bus = Bus::new(&root);
@@ -174,7 +174,7 @@ impl OPCApp {
             ui::print_error(&format!("  ⚠ {e}"));
         }
         if !root.join("AGENTS.md").exists() {
-            ui::print_error("  ⚠ Team directory not initialized. Run 'opc init' first.");
+            ui::print_error("  ⚠ Team directory not initialized. Run 'myopc init' first.");
         }
     }
 
@@ -255,7 +255,7 @@ impl OPCApp {
             "execute_role_task" => {
                 let role = args["role"].as_str().unwrap_or("").to_string();
                 let task_id = args["task_id"].as_str().unwrap_or("").to_string();
-                if opc::agent_runner::has_sync_tool(&role) {
+                if myopc::agent_runner::has_sync_tool(&role) {
                     let summary = self.runner.lock().await.run(&role, &task_id).await;
                     ui::print_agent_done(&role, &summary);
                     summary
@@ -501,7 +501,7 @@ impl OPCApp {
             }
             "/tasks" => {
                 let mut all: Vec<Value> = Vec::new();
-                for role in opc::bus::ROLES {
+                for role in myopc::bus::ROLES {
                     all.extend(self.bus.list_inbox(role).iter().map(|t| serde_json::to_value(t).unwrap_or(Value::Null)));
                     all.extend(self.bus.list_active(role).iter().map(|t| serde_json::to_value(t).unwrap_or(Value::Null)));
                 }
@@ -597,26 +597,26 @@ impl OPCApp {
     }
 
     async fn uninstall(&self) {
-        println!("{}", "⚠ Uninstall OPC".bold().red());
+        println!("{}", "⚠ Uninstall MYOPC".bold().red());
         println!("This will:");
-        println!("  1. Remove ~/.opc/ config directory");
-        println!("  (binary: run `cargo uninstall opc-cli` or delete the binary)");
+        println!("  1. Remove ~/.myopc/ config directory");
+        println!("  (binary: run `cargo uninstall myopc` or delete the binary)");
         let answer = ui::prompt_user_answer();
         if answer.trim().to_lowercase() != "y" {
             println!("Cancelled.");
             return;
         }
-        let opc_home = std::env::var("HOME").map(PathBuf::from).unwrap_or_default().join(".opc");
+        let opc_home = std::env::var("HOME").map(PathBuf::from).unwrap_or_default().join(".myopc");
         if opc_home.exists() {
             std::fs::remove_dir_all(&opc_home).ok();
             println!("Removed {}", opc_home.to_string_lossy());
         }
-        println!("{}", "OPC uninstalled.".green());
+        println!("{}", "MYOPC uninstalled.".green());
     }
 
     pub async fn chat(&self, user_input: &str) {
         if self.config.api_key.is_empty() {
-            ui::print_error("No api_key configured. Edit opc.json or set OPC_API_KEY.");
+            ui::print_error("No api_key configured. Edit myopc.json or set MYOPC_API_KEY.");
             return;
         }
         let executor: Arc<dyn ToolExecutor> = Arc::new(self.clone());
@@ -628,7 +628,7 @@ impl OPCApp {
 }
 
 #[async_trait::async_trait]
-impl ToolExecutor for OPCApp {
+impl ToolExecutor for MYOPCApp {
     async fn execute(&self, name: &str, args: &Value) -> String {
         self.execute_tool(name, args).await
     }
@@ -643,11 +643,11 @@ async fn main() {
         return;
     }
 
-    let mut app = OPCApp::new();
+    let mut app = MYOPCApp::new();
     app.init();
 
     let home = std::env::var("HOME").map(PathBuf::from).unwrap_or_default();
-    let opc_dir = home.join(".opc");
+    let opc_dir = home.join(".myopc");
     std::fs::create_dir_all(&opc_dir).ok();
     let history_file = opc_dir.join("history");
 
@@ -658,7 +658,7 @@ async fn main() {
 
     loop {
         app.drain_notifications().await;
-        match rl.readline("opc > ") {
+        match rl.readline("myopc > ") {
             Ok(line) => {
                 rl.add_history_entry(line.as_str()).ok();
                 let trimmed = line.trim().to_string();

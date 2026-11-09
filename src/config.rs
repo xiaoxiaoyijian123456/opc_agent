@@ -67,30 +67,30 @@ fn home() -> PathBuf {
 pub fn load_config() -> Config {
     let mut cfg = defaults();
 
-    let global = home().join(".opc").join("opc.json");
+    let global = home().join(".myopc").join("myopc.json");
     merge_into(&mut cfg, load_json(&global));
 
     let hidden = std::env::current_dir()
         .unwrap_or_default()
-        .join(".opc_agent")
-        .join("opc.json");
+        .join(".myopc_agent")
+        .join("myopc.json");
     merge_into(&mut cfg, load_json(&hidden));
 
     let local = std::env::current_dir()
         .unwrap_or_default()
-        .join("opc.json");
+        .join("myopc.json");
     merge_into(&mut cfg, load_json(&local));
 
     // Environment overrides (highest priority)
     let env_map: [(&str, &str); 8] = [
-        ("OPC_API_KEY", "api_key"),
-        ("OPC_BASE_URL", "base_url"),
-        ("OPC_MODEL", "default_model"),
-        ("OPC_PROVIDER", "provider"),
-        ("OPC_TEAM_ROOT", "team_root"),
-        ("OPC_CODE_ROOT", "code_root"),
-        ("OPC_MAX_TOKENS", "max_tokens"),
-        ("OPC_TEMPERATURE", "temperature"),
+        ("MYOPC_API_KEY", "api_key"),
+        ("MYOPC_BASE_URL", "base_url"),
+        ("MYOPC_MODEL", "default_model"),
+        ("MYOPC_PROVIDER", "provider"),
+        ("MYOPC_TEAM_ROOT", "team_root"),
+        ("MYOPC_CODE_ROOT", "code_root"),
+        ("MYOPC_MAX_TOKENS", "max_tokens"),
+        ("MYOPC_TEMPERATURE", "temperature"),
     ];
     for (k, field) in env_map {
         if let Ok(v) = std::env::var(k) {

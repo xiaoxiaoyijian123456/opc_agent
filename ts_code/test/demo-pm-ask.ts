@@ -24,7 +24,7 @@ const DEMO_DIR = path.join(PROJECT_ROOT, '.demo-pm');
 function setup() {
   fs.removeSync(DEMO_DIR);
   fs.ensureDirSync(DEMO_DIR);
-  const scaffoldSrc = path.join(PROJECT_ROOT, 'scaffold');
+  const scaffoldSrc = path.join(PROJECT_ROOT, '..', 'scaffold');
   for (const f of getAllFiles(scaffoldSrc)) {
     const rel = path.relative(scaffoldSrc, f);
     if (path.basename(rel).startsWith('.')) continue;

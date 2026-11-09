@@ -1,4 +1,4 @@
-# AGENTS.md — OPC Team Operating Protocol
+# AGENTS.md — MYOPC Team Operating Protocol
 
 > 本文件是所有 Agent 的初始化必读文档。Brain 和每个角色 Agent 在启动时自动加载此文件作为基础协议。
 
@@ -177,10 +177,10 @@ Boss: "登录页验证码倒计时有 BUG"
 ### 4.1 目录结构
 
 ```
-OPC_Team/
+MYOPC_Team/
 ├── AGENTS.md                          ← 本文件，初始化必读
 ├── BOUNDARY.md                        ← 安全红线，所有角色强制遵守
-├── opc.json                           ← 配置文件
+├── myopc.json                           ← 配置文件
 │
 ├── communication/bus/                 ← 消息总线
 │   └── {role}/

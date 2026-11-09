@@ -2,7 +2,7 @@ use colored::Colorize;
 use serde_json::Value;
 use std::path::{Path, PathBuf};
 
-pub const TEAM_DIR: &str = ".opc_agent";
+pub const TEAM_DIR: &str = ".myopc_agent";
 
 const ROLES: [&str; 5] = ["pm", "dev", "ui", "tester", "admin"];
 
@@ -16,12 +16,12 @@ const RUNTIME_DIRS: [&str; 6] = [
 ];
 
 fn scaffold_root() -> PathBuf {
-    if let Ok(p) = std::env::var("OPC_SCAFFOLD") {
+    if let Ok(p) = std::env::var("MYOPC_SCAFFOLD") {
         let p = PathBuf::from(p);
         if p.exists() { return p; }
     }
     let manifest_dir = PathBuf::from(env!("CARGO_MANIFEST_DIR"));
-    let from_repo = manifest_dir.join("../scaffold");
+    let from_repo = manifest_dir.join("scaffold");
     if from_repo.exists() { return from_repo; }
     if let Ok(exe) = std::env::current_exe() {
         if let Some(dir) = exe.parent() {
@@ -90,12 +90,12 @@ pub fn init_project(target: &Path) {
         }
     }
 
-    let opc_json = target_root.join("opc.json");
+    let opc_json = target_root.join("myopc.json");
     if !opc_json.exists() {
-        let example = target_root.join("opc.json.example");
+        let example = target_root.join("myopc.json.example");
         if example.exists() {
             std::fs::copy(&example, &opc_json).ok();
-            created.push("opc.json".to_string());
+            created.push("myopc.json".to_string());
         }
     }
 
@@ -112,7 +112,7 @@ pub fn init_project(target: &Path) {
         }
     }
 
-    println!("\n{}", format!("OPC initialized in {}", target_root.display()).bold().green());
+    println!("\n{}", format!("MYOPC initialized in {}", target_root.display()).bold().green());
     println!("  {}\n", "Code root: \".\" — generated code will be written into this directory".dimmed());
     if !created.is_empty() {
         for f in &created {
@@ -123,7 +123,7 @@ pub fn init_project(target: &Path) {
         println!("\n  {} existing files unchanged", skipped.to_string().dimmed());
     }
     println!("\n{}", "Next steps:".bold());
-    println!("  1. Edit {} — set your api_key", format!("{TEAM_DIR}/opc.json").cyan());
-    println!("  2. Run {} to start", "opc".cyan());
+    println!("  1. Edit {} — set your api_key", format!("{TEAM_DIR}/myopc.json").cyan());
+    println!("  2. Run {} to start", "myopc".cyan());
     println!();
 }

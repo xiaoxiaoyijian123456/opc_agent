@@ -25,7 +25,7 @@ interface DoneTask {
 let _mainRl: readline.Interface | null = null;
 let _replIdle = false;
 
-class OPCApp {
+class MYOPCApp {
   config!: Config;
   bus!: Bus;
   identity!: IdentityEngine;
@@ -69,7 +69,7 @@ class OPCApp {
     }
 
     if (!fs.existsSync(path.join(root, 'AGENTS.md'))) {
-      ui.printError("  ⚠ Team directory not initialized. Run 'opc init' first.");
+      ui.printError("  ⚠ Team directory not initialized. Run 'myopc init' first.");
     }
   }
 
@@ -408,10 +408,10 @@ class OPCApp {
   }
 
   private async uninstall() {
-    console.log(chalk.bold.red('⚠ Uninstall OPC'));
+    console.log(chalk.bold.red('⚠ Uninstall MYOPC'));
     console.log('This will:');
-    console.log('  1. npm uninstall -g opc-agent');
-    console.log('  2. Remove ~/.opc/ config directory');
+    console.log('  1. npm uninstall -g myopc-cli');
+    console.log('  2. Remove ~/.myopc/ config directory');
 
     const answer = await ui.promptUserAnswer();
     if (answer.trim().toLowerCase() !== 'y') {
@@ -419,19 +419,19 @@ class OPCApp {
       return;
     }
     try {
-      execSync('npm uninstall -g opc-agent', { stdio: 'inherit' });
+      execSync('npm uninstall -g myopc-cli', { stdio: 'inherit' });
     } catch {}
-    const opcHome = path.join(process.env.HOME ?? '~', '.opc');
+    const opcHome = path.join(process.env.HOME ?? '~', '.myopc');
     if (fs.existsSync(opcHome)) {
       fs.removeSync(opcHome);
       console.log(`Removed ${opcHome}`);
     }
-    console.log(chalk.green('OPC uninstalled.'));
+    console.log(chalk.green('MYOPC uninstalled.'));
   }
 
   async chat(userInput: string) {
     if (!this.config.apiKey) {
-      ui.printError('No api_key configured. Edit opc.json or set OPC_API_KEY.');
+      ui.printError('No api_key configured. Edit myopc.json or set MYOPC_API_KEY.');
       return;
     }
     try {
@@ -452,16 +452,16 @@ async function main() {
     return;
   }
 
-  const app = new OPCApp();
+  const app = new MYOPCApp();
   app.init();
 
-  const historyDir = path.join(process.env.HOME ?? '~', '.opc');
+  const historyDir = path.join(process.env.HOME ?? '~', '.myopc');
   fs.ensureDirSync(historyDir);
 
   const rl = readline.createInterface({
     input: process.stdin,
     output: process.stdout,
-    prompt: 'opc > ',
+    prompt: 'myopc > ',
   });
 
   _mainRl = rl;
@@ -470,7 +470,7 @@ async function main() {
   const askQuestion = (): void => {
     app.drainNotifications();
     _replIdle = true;
-    rl.question('opc > ', async (input) => {
+    rl.question('myopc > ', async (input) => {
       _replIdle = false;
       const trimmed = input.trim();
       if (!trimmed) {

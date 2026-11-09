@@ -1,14 +1,13 @@
 {
-  "name": "opc-cli",
+  "name": "myopc-cli",
   "version": "0.1.0",
-  "description": "OPC - AI multi-agent team orchestrator CLI",
+  "description": "MYOPC - AI multi-agent team orchestrator CLI",
   "type": "module",
   "bin": {
-    "opc": "./dist/main.js"
+    "myopc": "./dist/main.js"
   },
   "files": [
-    "dist/",
-    "scaffold/"
+    "dist/"
   ],
   "scripts": {
     "build": "tsup",

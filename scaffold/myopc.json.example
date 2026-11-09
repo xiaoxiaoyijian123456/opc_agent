@@ -3,7 +3,7 @@
     "api_key": "",
     "base_url": "https://api.openai.com/v1",
     "default_model": "gpt-4o",
-    "team_root": ".opc_agent",
+    "team_root": ".myopc_agent",
     "code_root": ".",
     "max_tokens": 8192,
     "temperature": 0.7

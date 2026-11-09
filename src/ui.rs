@@ -12,7 +12,7 @@ fn role_label(role: &str) -> &str {
         "ui" => "UI",
         "tester" => "Test",
         "admin" => "Admin",
-        "brain" => "OPC",
+        "brain" => "MYOPC",
         _ => role,
     }
 }
@@ -41,7 +41,7 @@ pub fn print_welcome(
     temperature: f32,
 ) {
     let lines = vec![
-        "OPC Team Agent v0.1".bold().to_string(),
+        "MYOPC Team Agent v0.1".bold().to_string(),
         String::new(),
         format!("  Provider   : {}", provider.cyan()),
         format!("  Model      : {}", model.cyan()),
@@ -113,7 +113,7 @@ pub fn print_help() {
         ("/skill install <url>", "Install skill from GitHub"),
         ("/skill remove <name>", "Remove a skill"),
         ("/compact", "Toggle compact output"),
-        ("/uninstall", "Remove OPC from system"),
+        ("/uninstall", "Remove MYOPC from system"),
         ("/help", "This help"),
         ("/exit", "Quit"),
     ];

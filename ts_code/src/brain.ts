@@ -6,7 +6,7 @@ import { TOOL_DEFS, toAnthropicTools, type ToolDef } from './tools.js';
 export type ToolExecutor = (name: string, args: Record<string, any>) => Promise<string>;
 
 const BRAIN_RULES = `
-You are OPC Brain, the central coordinator. Follow the AGENTS.md protocol and Handoff Protocols above.
+You are MYOPC Brain, the central coordinator. Follow the AGENTS.md protocol and Handoff Protocols above.
 
 Execution rules:
 - Chat queries: answer directly, no tools.

@@ -21,7 +21,7 @@ function setup() {
   fs.removeSync(DEMO_DIR);
   fs.ensureDirSync(DEMO_DIR);
 
-  const scaffoldSrc = path.join(PROJECT_ROOT, 'scaffold');
+  const scaffoldSrc = path.join(PROJECT_ROOT, '..', 'scaffold');
   for (const f of getAllFiles(scaffoldSrc)) {
     const rel = path.relative(scaffoldSrc, f);
     if (path.basename(rel).startsWith('.')) continue;
@@ -48,7 +48,7 @@ function getAllFiles(dir: string): string[] {
 }
 
 function cmd(text: string) {
-  console.log(`\n${chalk.bold.cyan('opc >')} ${chalk.white(text)}`);
+  console.log(`\n${chalk.bold.cyan('myopc >')} ${chalk.white(text)}`);
   console.log();
 }
 
