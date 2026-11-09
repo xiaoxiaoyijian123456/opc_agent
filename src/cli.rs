@@ -33,5 +33,6 @@ pub async fn run(app: MYOPCApp) {
             }
         }
     }
+    app.shutdown();
     println!("\nBye.");
 }

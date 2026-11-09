@@ -153,6 +153,8 @@ fn resolve_write_target_mappings() {
         }),
     );
     let code_root = dir.join("code");
+    std::fs::create_dir_all(&code_root).unwrap();
+    let code_root = code_root.canonicalize().unwrap();
     let runner = runner_set_code_root(runner, code_root.clone());
 
     let case = |raw: &str| runner.resolve_write_target(raw);
@@ -169,10 +171,9 @@ fn resolve_write_target_mappings() {
     assert_eq!(full, code_root.join("a.py"));
     assert_eq!(display, "a.py");
 
-    let (full, display) = case("artifacts/x.md").unwrap();
-    assert_eq!(full, dir.join(".myopc_agent/.artifacts/x.md"));
-    assert_eq!(display, "x.md");
-
+    assert!(case("artifacts/x.md").is_none());
+    assert!(case(".myopc_agent/x.md").is_none());
+    assert!(case(".git/config").is_none());
     assert!(case("../escape").is_none());
     assert!(case("/abs/path").is_none());
     assert!(case("").is_none());

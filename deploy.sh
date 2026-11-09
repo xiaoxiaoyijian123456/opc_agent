@@ -10,6 +10,7 @@ cargo build --release
 MYOPC_DIR="$HOME/.myopc"
 BIN_DIR="$MYOPC_DIR/bin"
 mkdir -p "$BIN_DIR"
+chmod 700 "$MYOPC_DIR"
 cp target/release/myopc "$BIN_DIR/myopc"
 chmod +x "$BIN_DIR/myopc"
 
@@ -25,5 +26,6 @@ if [ ! -f "$MYOPC_DIR/myopc.json" ]; then
 else
   echo "  已存在，跳过（不覆盖）$MYOPC_DIR/myopc.json"
 fi
+chmod 600 "$MYOPC_DIR/myopc.json"
 
 echo "✅ 完成。运行: myopc init / myopc"

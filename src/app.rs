@@ -1,4 +1,5 @@
 use crate::agent_runner::{normalize_path, AgentRunner, ToolExecutor};
+use crate::approval::{ApprovalKind, ApprovalRequest, ApprovalService};
 use crate::brain::Brain;
 use crate::bus::Bus;
 use crate::config::{team_root_path, validate_config, Config};
@@ -6,16 +7,16 @@ use crate::identity::IdentityEngine;
 use crate::instance_lock::InstanceLock;
 use crate::llm::{HttpLlm, LlmBackend};
 use crate::orchestrator::{CliPrdApproval, Orchestrator};
+use crate::process::{ProcessExecutor, ProcessRequest, MAX_TIMEOUT, SHELL_TIMEOUT};
 use crate::skill_loader::SkillLoader;
 use crate::task_store::TaskStore;
 use crate::tools;
 use crate::ui;
 use colored::Colorize;
 use serde_json::Value;
-use std::path::{Path, PathBuf};
-use std::process::{Command, Stdio};
+use std::path::PathBuf;
 use std::sync::Arc;
-use std::time::{Duration, Instant};
+use std::time::Duration;
 use tokio::sync::Mutex;
 
 #[derive(Clone)]
@@ -26,35 +27,10 @@ pub struct MYOPCApp {
     brain: Arc<Mutex<Brain>>,
     store: TaskStore,
     orchestrator: Arc<Orchestrator>,
+    approval: ApprovalService,
+    process: ProcessExecutor,
+    code_root: PathBuf,
     _instance_lock: Arc<InstanceLock>,
-}
-
-fn run_with_timeout(mut child: std::process::Child, timeout: Duration) -> (i32, String, String) {
-    let start = Instant::now();
-    loop {
-        match child.try_wait() {
-            Ok(Some(st)) => {
-                let mut out = String::new();
-                let mut err = String::new();
-                if let Some(mut o) = child.stdout.take() {
-                    let _ = std::io::Read::read_to_string(&mut o, &mut out);
-                }
-                if let Some(mut e) = child.stderr.take() {
-                    let _ = std::io::Read::read_to_string(&mut e, &mut err);
-                }
-                return (st.code().unwrap_or(1), out, err);
-            }
-            Ok(None) => {
-                if start.elapsed() > timeout {
-                    let _ = child.kill();
-                    let _ = child.wait();
-                    return (1, String::new(), "Timed out".to_string());
-                }
-                std::thread::sleep(Duration::from_millis(100));
-            }
-            Err(e) => return (1, String::new(), e.to_string()),
-        }
-    }
 }
 
 impl MYOPCApp {
@@ -62,6 +38,8 @@ impl MYOPCApp {
         let root = team_root_path(&config);
         let workspace = root.join("workspace");
         std::fs::create_dir_all(&workspace).ok();
+        std::fs::set_permissions(&root, std::os::unix::fs::PermissionsExt::from_mode(0o700))
+            .map_err(|error| format!("Cannot protect team directory {root:?}: {error}"))?;
 
         let instance_lock = Arc::new(InstanceLock::acquire(&root)?);
         let store = TaskStore::open(&root)?;
@@ -73,7 +51,14 @@ impl MYOPCApp {
         }
         let bus = Bus::new(&root);
         let identity = IdentityEngine::new(&root);
-        let skills = SkillLoader::new(&root.join("skills"));
+        let approval = ApprovalService::cli();
+        let process = ProcessExecutor::new(&root.join("logs"))?;
+        let skills = SkillLoader::new(
+            &root.join("skills"),
+            approval.clone(),
+            process.clone(),
+            config.redactions(),
+        )?;
         let all_tools = tools::merge_tools(tools::tool_defs(), skills.scan());
         let llm: Arc<dyn LlmBackend> = Arc::new(HttpLlm::new());
         let brain = Brain::new(
@@ -92,13 +77,14 @@ impl MYOPCApp {
         let code_root = normalize_path(&PathBuf::from(
             config.code_root.clone().unwrap_or_else(|| ".".into()),
         ));
-        std::fs::create_dir_all(&code_root).ok();
-        runner.code_root = Some(code_root);
+        std::fs::create_dir_all(&code_root)
+            .map_err(|error| format!("Cannot create code root {code_root:?}: {error}"))?;
+        runner.code_root = Some(code_root.clone());
         let runner = Arc::new(Mutex::new(runner));
         let orchestrator = Arc::new(Orchestrator::new(
             store.clone(),
             runner,
-            Arc::new(CliPrdApproval),
+            Arc::new(CliPrdApproval::new(config.redactions())),
         ));
 
         let errors = validate_config(&config);
@@ -129,12 +115,14 @@ impl MYOPCApp {
             brain: Arc::new(Mutex::new(brain)),
             store,
             orchestrator,
+            approval,
+            process,
+            code_root,
             _instance_lock: instance_lock,
         })
     }
 
     async fn execute_tool(&self, name: &str, args: &Value) -> String {
-        let root = team_root_path(&self.config);
         match name {
             "start_workflow" => {
                 let state = self.identity.read_intervention();
@@ -142,7 +130,7 @@ impl MYOPCApp {
                     ui::print_intervention_block("STOP");
                     return "BLOCKED: Intervention state is STOP. All workflows halted.".into();
                 }
-                let request = args["request"].as_str().unwrap_or("");
+                let request = &self.config.redact(args["request"].as_str().unwrap_or(""));
                 match self.orchestrator.start(request).await {
                     Ok(workflow) => serde_json::to_string(&workflow).unwrap_or_default(),
                     Err(error) => format!("ERROR: {error}"),
@@ -188,9 +176,18 @@ impl MYOPCApp {
             }
 
             "run_bash" => {
-                let command = args["command"].as_str().unwrap_or("").to_string();
-                let description = args["description"].as_str().unwrap_or("").to_string();
-                self.execute_bash(&command, &description, &root).await
+                let command = args["command"].as_str().unwrap_or("");
+                let description = args["description"].as_str().unwrap_or("");
+                let timeout = match args.get("timeout_seconds") {
+                    None => SHELL_TIMEOUT,
+                    Some(value) => match value.as_u64().map(Duration::from_secs) {
+                        Some(timeout) if timeout <= MAX_TIMEOUT && !timeout.is_zero() => timeout,
+                        _ => {
+                            return "ERROR: timeout_seconds must be an integer from 1 to 600".into()
+                        }
+                    },
+                };
+                self.execute_bash(command, description, timeout).await
             }
 
             _ if name.starts_with("skill_") => {
@@ -205,46 +202,37 @@ impl MYOPCApp {
         }
     }
 
-    async fn execute_bash(&self, command: &str, description: &str, root: &Path) -> String {
-        // 直接执行，不再向用户确认（需求确认后流程自动执行）
-        if !description.is_empty() {
-            println!("  {} {}", "$".bold().yellow(), command.white());
-            println!("  {}", description.dimmed());
-        }
-        let child = match Command::new("sh")
-            .arg("-c")
-            .arg(command)
-            .current_dir(root)
-            .stdin(Stdio::null())
-            .stdout(Stdio::piped())
-            .stderr(Stdio::piped())
-            .spawn()
-        {
-            Ok(c) => c,
-            Err(e) => return format!("Error: {e}"),
+    async fn execute_bash(&self, command: &str, description: &str, timeout: Duration) -> String {
+        let request = match ProcessRequest::shell(
+            command,
+            self.code_root.clone(),
+            timeout,
+            self.config.redactions(),
+        ) {
+            Ok(request) => request,
+            Err(error) => return format!("ERROR: {error}"),
         };
-        let (code, stdout, stderr) = run_with_timeout(child, Duration::from_secs(120));
-        if code == 0 {
-            ui::print_bash_output(&stdout, &stderr, 0);
-            let t = stdout.trim().to_string();
-            if t.is_empty() {
-                "(no output)".into()
-            } else {
-                t
+        let request = ApprovalRequest::new(
+            ApprovalKind::Shell {
+                command: command.into(),
+                description: description.into(),
+            },
+            request,
+        );
+        let approved = match self.approval.authorize(request) {
+            Ok(approved) => approved,
+            Err(error) => return error,
+        };
+        match self.process.execute(approved) {
+            Ok(outcome) => {
+                ui::print_bash_output(
+                    &outcome.stdout_summary(),
+                    &outcome.stderr_summary(),
+                    if outcome.success() { 0 } else { 1 },
+                );
+                outcome.llm_summary()
             }
-        } else {
-            ui::print_bash_output(&stdout, &stderr, code);
-            let mut output = stdout;
-            if !stderr.is_empty() {
-                output.push_str(&format!("\nSTDERR:\n{stderr}"));
-            }
-            output.push_str(&format!("\nExit code: {code}"));
-            let t = output.trim().to_string();
-            if t.is_empty() {
-                "(no output)".into()
-            } else {
-                t
-            }
+            Err(error) => format!("ERROR: {error}"),
         }
     }
 
@@ -254,7 +242,10 @@ impl MYOPCApp {
         let arg = parts.collect::<Vec<_>>().join(" ").trim().to_string();
 
         match command.as_str() {
-            "/exit" => return true,
+            "/exit" => {
+                self.process.kill_all();
+                return true;
+            }
             "/status" => match self.store.status() {
                 Ok(status) => ui::print_status(&status),
                 Err(error) => ui::print_error(&error),
@@ -301,6 +292,7 @@ impl MYOPCApp {
                         if desc.is_empty() {
                             ui::print_error("Usage: /dispatch <role> <task description>");
                         } else {
+                            let desc = self.config.redact(&desc);
                             match self.store.create_manual(role, &desc) {
                                 Ok((workflow, task)) => println!(
                                     "Dispatched [{}] to {role}. Run /resume {} to execute.",
@@ -424,10 +416,15 @@ impl MYOPCApp {
             return;
         }
         let executor: Arc<dyn ToolExecutor> = Arc::new(self.clone());
-        match self.brain.lock().await.chat(user_input, executor).await {
-            Ok(r) => println!("{r}"),
+        let user_input = self.config.redact(user_input);
+        match self.brain.lock().await.chat(&user_input, executor).await {
+            Ok(r) => println!("{}", self.config.redact(&r)),
             Err(e) => ui::print_error(&format!("Error: {e}")),
         }
+    }
+
+    pub fn shutdown(&self) {
+        self.process.kill_all();
     }
 }
 

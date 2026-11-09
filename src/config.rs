@@ -1,4 +1,5 @@
 use serde::Deserialize;
+use std::os::unix::fs::PermissionsExt;
 use std::path::{Path, PathBuf};
 
 #[derive(Clone, Debug, Deserialize, PartialEq)]
@@ -46,9 +47,41 @@ fn load_json(file: &Path) -> Result<Option<RawConfig>, String> {
         Err(error) if error.kind() == std::io::ErrorKind::NotFound => return Ok(None),
         Err(error) => return Err(format!("Cannot read config {}: {error}", file.display())),
     };
-    serde_json::from_str(&source)
+    let raw: RawConfig = serde_json::from_str(&source)
         .map(Some)
-        .map_err(|error| format!("Invalid config {}: {error}", file.display()))
+        .map_err(|error| format!("Invalid config {}: {error}", file.display()))?
+        .unwrap_or_default();
+    if raw.api_key.as_deref().is_some_and(|key| !key.is_empty()) {
+        let file_mode = std::fs::metadata(file)
+            .map_err(|error| format!("Cannot inspect config {}: {error}", file.display()))?
+            .permissions()
+            .mode()
+            & 0o777;
+        if file_mode != 0o600 {
+            return Err(format!(
+                "Config {} contains an API key and must have mode 0600 (current {file_mode:04o})",
+                file.display()
+            ));
+        }
+        let parent = file.parent().unwrap_or_else(|| Path::new("."));
+        let directory_mode = std::fs::metadata(parent)
+            .map_err(|error| {
+                format!(
+                    "Cannot inspect config directory {}: {error}",
+                    parent.display()
+                )
+            })?
+            .permissions()
+            .mode()
+            & 0o777;
+        if directory_mode != 0o700 {
+            return Err(format!(
+                "Config directory {} contains an API key file and must have mode 0700 (current {directory_mode:04o})",
+                parent.display()
+            ));
+        }
+    }
+    Ok(Some(raw))
 }
 
 fn merge_into(base: &mut Config, raw: RawConfig) {
@@ -195,6 +228,20 @@ pub fn team_root_path(config: &Config) -> PathBuf {
     }
 }
 
+impl Config {
+    pub fn redactions(&self) -> Vec<String> {
+        if self.api_key.is_empty() {
+            Vec::new()
+        } else {
+            vec![self.api_key.clone()]
+        }
+    }
+
+    pub fn redact(&self, text: &str) -> String {
+        crate::redaction::redact_text(text, &self.redactions())
+    }
+}
+
 pub fn validate_config(config: &Config) -> Vec<String> {
     let mut errors = validate_values(config);
     if config.api_key.is_empty() {
@@ -269,5 +316,39 @@ mod tests {
         let error =
             apply_env_override(&mut config, "MYOPC_MAX_TOKENS", "not-a-number".into()).unwrap_err();
         assert!(error.contains("MYOPC_MAX_TOKENS"));
+    }
+
+    #[test]
+    fn config_with_api_key_requires_private_permissions() {
+        let dir = std::env::temp_dir().join(format!(
+            "myopc-config-permissions-{}",
+            uuid::Uuid::new_v4().simple()
+        ));
+        std::fs::create_dir_all(&dir).unwrap();
+        let file = dir.join("myopc.json");
+        std::fs::write(&file, r#"{"api_key":"secret"}"#).unwrap();
+        std::fs::set_permissions(&dir, std::os::unix::fs::PermissionsExt::from_mode(0o755))
+            .unwrap();
+        std::fs::set_permissions(&file, std::os::unix::fs::PermissionsExt::from_mode(0o644))
+            .unwrap();
+
+        assert!(load_json(&file).err().unwrap().contains("0600"));
+        std::fs::set_permissions(&file, std::os::unix::fs::PermissionsExt::from_mode(0o600))
+            .unwrap();
+        assert!(load_json(&file).err().unwrap().contains("0700"));
+        std::fs::set_permissions(&dir, std::os::unix::fs::PermissionsExt::from_mode(0o700))
+            .unwrap();
+        assert!(load_json(&file).is_ok());
+        std::fs::remove_dir_all(dir).ok();
+    }
+
+    #[test]
+    fn configured_api_key_is_redacted() {
+        let mut config = defaults();
+        config.api_key = "secret-value".into();
+        assert_eq!(
+            config.redact("before secret-value after"),
+            "before *** after"
+        );
     }
 }

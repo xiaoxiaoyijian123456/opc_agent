@@ -128,7 +128,7 @@ Admin 只做汇总，不重新判断技术结论。上游需提供：
 
 | 类型 | 路径 |
 |------|------|
-| 角色文档 | `workspace/artifacts/{task_id}_{role}.md` |
+| 角色文档 | `.myopc_agent/.artifacts/{task_id}_{role}.md` |
 | 多项目模式 | `workspace/{project}/artifacts/{task_id}_{role}.md` |
 | 代码 | 项目 `code/` 目录（由 `create_project` 决定，默认 `workspace/{project}/code/`） |
 | 归档 | `memory_center/archive/{YYYY-MM-DD}/{task_id}.json` |

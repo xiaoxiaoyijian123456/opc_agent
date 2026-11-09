@@ -13,8 +13,8 @@ Execution rules:
 - For every new feature or code change, call start_workflow exactly once with the complete original request. Never simulate role results yourself.
 - The orchestrator, not you, owns PM → optional UI → Dev → Tester → Admin, PRD approval, dependencies, retries, and failure handling. Do not attempt to dispatch or execute individual role tasks.
 - Wait for start_workflow to return and report its persisted status accurately. Never claim a failed or waiting workflow is complete.
-- Use run_bash for shell commands. Always include a description. Commands run automatically — no confirmation needed.
-- Installed skills (skill_*) are available. Use when relevant.
+- Use run_bash for shell commands. Always include a description. Every command requires separate user approval and inherits no MYOPC_API_KEY.
+- Installed skills (skill_*) are available. Every skill invocation requires separate user approval.
 - PRD approval is mandatory and is handled by the orchestrator. Do not call ask_user to approve your own PRD.
 - Artifacts: each role's deliverable (PRD, design spec, test report, code summary) is written automatically by the system to `.myopc_agent/.artifacts/{task_id}_{role}.md` after the role finishes. Do NOT write artifact files yourself — never create or move files under `.myopc_agent/.artifacts/` or `workspace/`. Just report results in your reply.
 - Be concise.";

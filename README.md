@@ -89,7 +89,8 @@ MYOPC 是一个运行在终端里的 **AI 多智能体协作框架**。你只需
 | **Orchestrator + SQLite** | 确定性管理 PM、可选 UI、Dev、Tester、Admin，持久化依赖、审批、执行尝试与失败恢复 |
 | **Identity Engine** | 每个角色有独立的身份定义、能力边界、输出规范，确保各司其职不越界 |
 | **Tool Loop** | 角色通过 LLM tool-calling 循环执行任务：调用工具 → 获取结果 → 继续推理，直到产出最终交付物 |
-| **Skill System** | 插件机制。从 GitHub 安装自定义工具，Brain 自动发现并注入到角色的工具集中 |
+| **Execution Safety** | Shell/Skill 逐次默认拒绝审批，共享超时、进程组和日志管理；角色写入仅限代码根目录 |
+| **Skill System** | 用户主动安装插件，Brain 自动发现；安装不执行依赖或入口脚本，调用前逐次审批 |
 
 ---
 
@@ -103,6 +104,7 @@ MYOPC 是一个运行在终端里的 **AI 多智能体协作框架**。你只需
 cargo install --path .
 
 mkdir -p ~/.myopc
+chmod 700 ~/.myopc
 cp -n scaffold/myopc.json.example ~/.myopc/myopc.json
 chmod 600 ~/.myopc/myopc.json
 ```
@@ -147,6 +149,7 @@ my-startup/
 ```
 
 > 兼容所有 OpenAI API 格式的服务（DeepSeek、智谱、Moonshot 等），只需修改 `base_url` 和 `default_model`。
+> 推荐使用 `MYOPC_API_KEY` 环境变量。若配置文件包含 API Key，文件权限必须为 `0600`，所在目录必须为 `0700`，否则启动会停止并提示修复。
 
 ### 启动
 
@@ -271,13 +274,13 @@ PM 不会凭空猜测需求。收到任务后进入 Deepthink 模式：
 
 ### 人工审批节点
 
-Brain 在关键节点会暂停，等你确认：
+系统在关键节点会暂停，等你确认：
 
 | 节点 | 触发条件 |
 |------|----------|
 | **PRD 审批** | PM 产出 PRD 后，必须你确认才能分发给 Dev/UI |
-| **技术决策** | Dev 提出重大技术选型（框架/架构），需你确认 |
-| **发布就绪** | 全部角色产出完成，需你确认是否 ready |
+| **Shell 命令** | 每次展示完整命令、工作目录、用途和超时；仅输入 `y`/`yes` 执行，回车默认拒绝 |
+| **Skill 调用** | 每次展示名称、来源、入口、参数、工作目录和超时；逐次批准，不继承 `MYOPC_API_KEY` |
 | **范围变更** | 任何涉及范围扩大或成本增加的决策 |
 
 ---
@@ -368,6 +371,8 @@ export MYOPC_TEMPERATURE="0.7"
 
 优先级：**环境变量** > 当前目录 `myopc.json` > `.myopc_agent/myopc.json` > 全局 `~/.myopc/myopc.json`（默认使用全局配置）
 
+包含 API Key 的任一配置文件都必须使用 `0600` 权限，且其所在目录必须使用 `0700` 权限。
+
 ### 使用其他 LLM
 
 <details>
@@ -438,6 +443,8 @@ export MYOPC_TEMPERATURE="0.7"
 myopc > /skill install https://github.com/user/my-skill
 ```
 
+安装命令会展示下载来源、目标目录和超时并要求确认。安装只下载及校验 `manifest.json`，不会自动运行入口脚本、`pip` 或其他依赖安装命令；需要依赖时请单独批准 Shell 命令。
+
 ### 开发自定义 Skill
 
 在 `skills/` 下创建目录：
@@ -457,6 +464,7 @@ skills/my_tool/
     "version": "0.1.0",
     "type": "bash",
     "entry": "run.sh",
+    "timeout_seconds": 60,
     "parameters": {
         "type": "object",
         "properties": {
@@ -467,7 +475,7 @@ skills/my_tool/
 }
 ```
 
-Brain 会自动发现已安装的 Skill，并在合适的时机让角色调用。
+Brain 会自动发现已安装的 Skill。每次调用都会展示完整参数和执行位置，回车或其他非 `y`/`yes` 输入都会拒绝执行；`timeout_seconds` 可配置为 1–600 秒，默认 60 秒。完整输出保存在 `.myopc_agent/logs/`，终端和模型只接收明确标记的限长摘要。
 
 ---
 

@@ -1,5 +1,6 @@
 pub mod agent_runner;
 pub mod app;
+pub mod approval;
 pub mod brain;
 pub mod bus;
 pub mod cli;
@@ -9,6 +10,9 @@ pub mod init;
 pub mod instance_lock;
 pub mod llm;
 pub mod orchestrator;
+pub mod process;
+pub mod redaction;
+pub mod safe_write;
 pub mod skill_loader;
 pub mod task;
 pub mod task_store;

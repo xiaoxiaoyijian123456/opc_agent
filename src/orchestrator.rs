@@ -1,4 +1,5 @@
 use crate::agent_runner::AgentRunner;
+use crate::redaction::redact_text;
 use crate::task::Workflow;
 use crate::task_store::TaskStore;
 use crate::ui;
@@ -28,7 +29,15 @@ pub trait PrdApproval: Send + Sync {
 }
 
 #[derive(Clone)]
-pub struct CliPrdApproval;
+pub struct CliPrdApproval {
+    redactions: Vec<String>,
+}
+
+impl CliPrdApproval {
+    pub fn new(redactions: Vec<String>) -> Self {
+        Self { redactions }
+    }
+}
 
 #[async_trait]
 impl PrdApproval for CliPrdApproval {
@@ -48,7 +57,7 @@ impl PrdApproval for CliPrdApproval {
                         return PrdDecision::Terminate;
                     }
                     if !feedback.trim().is_empty() {
-                        return PrdDecision::Revise(feedback.trim().to_string());
+                        return PrdDecision::Revise(redact_text(feedback.trim(), &self.redactions));
                     }
                     println!("Feedback cannot be empty. Enter /terminate to stop instead.");
                 },

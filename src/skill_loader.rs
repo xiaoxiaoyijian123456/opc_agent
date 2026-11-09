@@ -1,12 +1,13 @@
+use crate::approval::{ApprovalKind, ApprovalRequest, ApprovalService};
+use crate::process::{ProcessExecutor, ProcessRequest, SHELL_TIMEOUT, SKILL_TIMEOUT};
 use crate::tools::{skill_tool, ToolDef};
+use crate::ui;
 use serde::Deserialize;
 use serde_json::Value;
 use std::collections::HashMap;
-use std::io::Write;
-use std::path::PathBuf;
-use std::process::{Command, Stdio};
+use std::path::{Component, Path, PathBuf};
 use std::sync::{Arc, Mutex};
-use std::time::{Duration, Instant};
+use std::time::Duration;
 
 #[derive(Deserialize, Clone, Debug)]
 struct SkillManifest {
@@ -17,6 +18,7 @@ struct SkillManifest {
     kind: Option<String>,
     entry: Option<String>,
     parameters: Option<Value>,
+    timeout_seconds: Option<u64>,
 }
 
 #[derive(Clone)]
@@ -29,43 +31,32 @@ struct SkillInfo {
 pub struct SkillLoader {
     dir: PathBuf,
     cache: Arc<Mutex<HashMap<String, SkillInfo>>>,
-}
-
-fn run_with_timeout(mut child: std::process::Child, timeout: Duration) -> (i32, String, String) {
-    let start = Instant::now();
-    loop {
-        match child.try_wait() {
-            Ok(Some(st)) => {
-                let mut out = String::new();
-                let mut err = String::new();
-                if let Some(mut o) = child.stdout.take() {
-                    let _ = std::io::Read::read_to_string(&mut o, &mut out);
-                }
-                if let Some(mut e) = child.stderr.take() {
-                    let _ = std::io::Read::read_to_string(&mut e, &mut err);
-                }
-                return (st.code().unwrap_or(1), out, err);
-            }
-            Ok(None) => {
-                if start.elapsed() > timeout {
-                    let _ = child.kill();
-                    let _ = child.wait();
-                    return (1, String::new(), "Timed out".to_string());
-                }
-                std::thread::sleep(Duration::from_millis(100));
-            }
-            Err(e) => return (1, String::new(), e.to_string()),
-        }
-    }
+    approval: ApprovalService,
+    process: ProcessExecutor,
+    redactions: Vec<String>,
 }
 
 impl SkillLoader {
-    pub fn new(skills_dir: &std::path::Path) -> SkillLoader {
-        std::fs::create_dir_all(skills_dir).ok();
-        SkillLoader {
+    pub fn new(
+        skills_dir: &Path,
+        approval: ApprovalService,
+        process: ProcessExecutor,
+        redactions: Vec<String>,
+    ) -> Result<SkillLoader, String> {
+        std::fs::create_dir_all(skills_dir)
+            .map_err(|error| format!("Cannot create skills directory {skills_dir:?}: {error}"))?;
+        std::fs::set_permissions(
+            skills_dir,
+            std::os::unix::fs::PermissionsExt::from_mode(0o700),
+        )
+        .map_err(|error| format!("Cannot protect skills directory {skills_dir:?}: {error}"))?;
+        Ok(SkillLoader {
             dir: skills_dir.to_path_buf(),
             cache: Arc::new(Mutex::new(HashMap::new())),
-        }
+            approval,
+            process,
+            redactions,
+        })
     }
 
     pub fn scan(&self) -> Vec<ToolDef> {
@@ -117,52 +108,66 @@ impl SkillLoader {
     }
 
     pub fn execute(&self, skill_name: &str, args: &Value) -> String {
-        let info = self.cache.lock().unwrap().get(skill_name).cloned();
+        let info = self
+            .cache
+            .lock()
+            .ok()
+            .and_then(|cache| cache.get(skill_name).cloned());
         let Some(info) = info else {
             return format!("Skill not found: {skill_name}");
         };
-        let entry_file = info.path.join(
-            info.manifest
-                .entry
-                .clone()
-                .unwrap_or_else(|| "run.sh".into()),
-        );
-        if !entry_file.exists() {
-            return format!("Entry not found: {}", entry_file.display());
-        }
+        let entry = info
+            .manifest
+            .entry
+            .clone()
+            .unwrap_or_else(|| "run.sh".into());
+        let entry_file = match resolve_skill_entry(&self.dir, &info.path, &entry) {
+            Ok(entry) => entry,
+            Err(error) => return format!("Skill error: {error}"),
+        };
         let kind = info.manifest.kind.clone().unwrap_or_else(|| "bash".into());
         let cmd = match kind.as_str() {
             "python" => "python3",
-            _ => "bash",
+            "bash" => "bash",
+            _ => return format!("Skill error: unsupported type {kind}"),
         };
-
-        let mut child = match Command::new(cmd)
-            .arg(&entry_file)
-            .stdin(Stdio::piped())
-            .stdout(Stdio::piped())
-            .stderr(Stdio::piped())
-            .current_dir(&info.path)
-            .spawn()
-        {
-            Ok(c) => c,
-            Err(e) => return format!("Skill failed: {e}"),
+        let arguments = match serde_json::to_string(args) {
+            Ok(arguments) => arguments,
+            Err(error) => return format!("Skill error: invalid arguments: {error}"),
         };
-
-        if let Some(mut stdin) = child.stdin.take() {
-            let _ = stdin.write_all(serde_json::to_string(args).unwrap_or_default().as_bytes());
+        let timeout = Duration::from_secs(info.manifest.timeout_seconds.unwrap_or(60));
+        let request = match ProcessRequest::new(
+            cmd,
+            vec![entry_file.to_string_lossy().into_owned()],
+            info.path.clone(),
+            if info.manifest.timeout_seconds.is_some() {
+                timeout
+            } else {
+                SKILL_TIMEOUT
+            },
+            Some(arguments.as_bytes().to_vec()),
+            self.redactions.clone(),
+        ) {
+            Ok(request) => request,
+            Err(error) => return format!("Skill error: {error}"),
+        };
+        let request = ApprovalRequest::new(
+            ApprovalKind::Skill {
+                name: skill_name.into(),
+                source: info.path,
+                entry: entry_file,
+                arguments,
+            },
+            request,
+        );
+        let approved = match self.approval.authorize(request) {
+            Ok(approved) => approved,
+            Err(error) => return error,
+        };
+        match self.process.execute(approved) {
+            Ok(outcome) => outcome.llm_summary(),
+            Err(error) => format!("Skill error: {error}"),
         }
-
-        let (code, stdout, stderr) = run_with_timeout(child, Duration::from_secs(60));
-        if !stdout.trim().is_empty() {
-            return stdout.trim().to_string();
-        }
-        if code != 0 && !stderr.trim().is_empty() {
-            return format!("Skill error: {}", stderr.trim());
-        }
-        if code != 0 {
-            return format!("Skill failed: exit code {code}");
-        }
-        "(no output)".to_string()
     }
 
     pub fn install(&self, github_url: &str) -> String {
@@ -174,39 +179,54 @@ impl SkillLoader {
             .trim_end_matches(".git")
             .to_string();
         let dest = self.dir.join(&name);
-        if dest.exists() {
+        if !valid_skill_directory_name(&name) {
+            return "Invalid skill directory name".into();
+        }
+        if std::fs::symlink_metadata(&dest).is_ok() {
             return format!("Skill '{name}' already exists. Remove first.");
         }
-
-        let status = Command::new("git")
-            .args(["clone", "--depth", "1", github_url])
-            .arg(&dest)
-            .status();
-
-        match status {
-            Ok(st) if st.success() => {}
-            _ => return "Clone failed: check the URL and git availability".to_string(),
+        let request = match ProcessRequest::new(
+            "git",
+            vec![
+                "clone".into(),
+                "--depth".into(),
+                "1".into(),
+                "--".into(),
+                github_url.into(),
+                dest.to_string_lossy().into_owned(),
+            ],
+            self.dir.clone(),
+            SHELL_TIMEOUT,
+            None,
+            self.redactions.clone(),
+        ) {
+            Ok(request) => request,
+            Err(error) => return error,
+        };
+        let request = ApprovalRequest::new(
+            ApprovalKind::SkillInstall {
+                url: github_url.into(),
+                destination: dest.clone(),
+            },
+            request,
+        );
+        let approved = match self.approval.authorize(request) {
+            Ok(approved) => approved,
+            Err(error) => return error,
+        };
+        match self.process.execute(approved) {
+            Ok(outcome) if outcome.success() => {}
+            Ok(outcome) => return outcome.llm_summary(),
+            Err(error) => return error,
         }
 
-        if !dest.join("manifest.json").exists() {
+        let valid_manifest = std::fs::read_to_string(dest.join("manifest.json"))
+            .ok()
+            .and_then(|source| serde_json::from_str::<SkillManifest>(&source).ok())
+            .is_some();
+        if !valid_manifest {
             std::fs::remove_dir_all(&dest).ok();
-            return "Invalid skill: no manifest.json found. Removed.".to_string();
-        }
-
-        let req = dest.join("requirements.txt");
-        if req.exists() {
-            let _ = Command::new("python3")
-                .args(["-m", "pip", "install", "-r"])
-                .arg(&req)
-                .status();
-        }
-
-        let pkg = dest.join("package.json");
-        if pkg.exists() {
-            let _ = Command::new("npm")
-                .args(["install", "--production"])
-                .current_dir(&dest)
-                .status();
+            return "Invalid skill: valid manifest.json is required. Removed.".to_string();
         }
 
         self.scan();
@@ -214,12 +234,26 @@ impl SkillLoader {
     }
 
     pub fn remove(&self, skill_name: &str) -> String {
-        let target = self.dir.join(skill_name);
-        if !target.exists() {
-            return format!("Skill '{skill_name}' not found.");
+        if !valid_skill_directory_name(skill_name) {
+            return "Invalid skill name; use an installed directory name, not a path".into();
         }
-        std::fs::remove_dir_all(&target).ok();
-        self.cache.lock().unwrap().remove(skill_name);
+        let target = self.dir.join(skill_name);
+        let metadata = match std::fs::symlink_metadata(&target) {
+            Ok(metadata) => metadata,
+            Err(_) => return format!("Skill '{skill_name}' not found."),
+        };
+        if metadata.file_type().is_symlink() || !metadata.is_dir() {
+            return format!("Skill '{skill_name}' is not an installed skill directory.");
+        }
+        println!("Remove skill '{skill_name}' at {}? [y/N]", target.display());
+        let answer = ui::prompt_user_answer();
+        if !matches!(answer.trim().to_lowercase().as_str(), "y" | "yes") {
+            return "Cancelled.".into();
+        }
+        if let Err(error) = std::fs::remove_dir_all(&target) {
+            return format!("Cannot remove skill '{skill_name}': {error}");
+        }
+        self.scan();
         format!("Removed skill '{skill_name}'.")
     }
 
@@ -242,4 +276,45 @@ impl SkillLoader {
             })
             .collect()
     }
+}
+
+fn valid_skill_directory_name(name: &str) -> bool {
+    !name.is_empty()
+        && name != "."
+        && name != ".."
+        && name
+            .chars()
+            .all(|character| character.is_ascii_alphanumeric() || "-_.".contains(character))
+}
+
+fn resolve_skill_entry(
+    skills_dir: &Path,
+    skill_dir: &Path,
+    entry: &str,
+) -> Result<PathBuf, String> {
+    let entry_path = Path::new(entry);
+    if entry_path.is_absolute()
+        || entry_path
+            .components()
+            .any(|component| !matches!(component, Component::Normal(_) | Component::CurDir))
+    {
+        return Err("Entry must stay inside the skill directory".into());
+    }
+    let skills_root = skills_dir
+        .canonicalize()
+        .map_err(|error| format!("Cannot resolve skills directory: {error}"))?;
+    let skill_root = skill_dir
+        .canonicalize()
+        .map_err(|error| format!("Cannot resolve skill directory: {error}"))?;
+    if !skill_root.starts_with(&skills_root) {
+        return Err("Skill directory escapes the skills root".into());
+    }
+    let entry_file = skill_root.join(entry_path);
+    let resolved = entry_file
+        .canonicalize()
+        .map_err(|error| format!("Entry not found {}: {error}", entry_file.display()))?;
+    if !resolved.starts_with(&skill_root) || !resolved.is_file() {
+        return Err("Entry must be a regular file inside the skill directory".into());
+    }
+    Ok(resolved)
 }

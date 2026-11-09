@@ -3,6 +3,8 @@ use crate::config::Config;
 use crate::identity::IdentityEngine;
 use crate::init::TEAM_DIR;
 use crate::llm::{LlmBackend, LlmResponse, Msg};
+use crate::redaction::contains_secret;
+use crate::safe_write::{atomic_write_private, SafeFileWriter};
 use crate::tools::ToolDef;
 use crate::ui;
 use async_trait::async_trait;
@@ -144,28 +146,33 @@ impl AgentRunner {
         };
         let user_msg = format!(
             "Task ID: {task_id}\nArtifact path: {artifact_rel} (written automatically by the system after you finish)\nIf you mention the artifact in your output, use exactly the path above. Do not invent a different filename or path.\n\nTask: {}\n\n{}{prd_protocol}",
-            task.title, task.content
+            self.config.redact(&task.title),
+            self.config.redact(&task.content)
         );
 
-        let result = match self.run_role(role, &system, &user_msg).await {
+        let mut result = match self.run_role(role, &system, &user_msg).await {
             Ok(r) => r,
             Err(error) => {
                 let error_text = format!("ERROR: {error}");
-                self.write_reflection(role, task_id, task, &error_text);
+                self.write_reflection(role, task_id, task, &error_text)?;
                 return Err(format!("Agent {role} failed: {error}"));
             }
         };
+        result.text = self.config.redact(&result.text);
 
         std::fs::create_dir_all(&artifact_dir)
             .map_err(|error| format!("Cannot create artifact directory: {error}"))?;
+        std::fs::set_permissions(
+            &artifact_dir,
+            std::os::unix::fs::PermissionsExt::from_mode(0o700),
+        )
+        .map_err(|error| format!("Cannot protect artifact directory: {error}"))?;
         let mut artifact_content = result.text.clone();
         if !result.files.is_empty() {
             let file_list: Vec<String> = result.files.iter().map(|f| format!("- {f}")).collect();
             artifact_content.push_str(&format!("\n\n## Files Written\n{}", file_list.join("\n")));
         }
-        std::fs::write(&artifact_path, artifact_content).map_err(|error| {
-            format!("Cannot write artifact {}: {error}", artifact_path.display())
-        })?;
+        atomic_write_private(&artifact_path, artifact_content.as_bytes())?;
 
         let summary: String = result.text.chars().take(200).collect();
         let summary = if result.text.chars().count() > 200 {
@@ -174,7 +181,7 @@ impl AgentRunner {
             summary
         };
         if result.text.starts_with("ERROR") {
-            self.write_reflection(role, task_id, task, &result.text);
+            self.write_reflection(role, task_id, task, &result.text)?;
         }
         Ok(AgentExecution {
             text: result.text,
@@ -243,40 +250,42 @@ impl AgentRunner {
             messages.push(Msg::AssistantToolCalls(resp.tool_calls.clone()));
             for tc in resp.tool_calls {
                 let result = self.handle_tool(&tc.name, &tc.arguments, role).await;
-                if tc.name == "write_file" {
-                    if let Some((_, display)) = self.resolve_write_target(
-                        tc.arguments
-                            .get("path")
-                            .and_then(|v| v.as_str())
-                            .unwrap_or(""),
-                    ) {
-                        written_files.push(display);
-                    }
+                if let Some(display) = result.written_file {
+                    written_files.push(display);
                 }
                 messages.push(Msg::ToolResult {
                     id: tc.id,
-                    content: result,
+                    content: result.message,
                 });
             }
         }
     }
 
-    async fn handle_tool(&self, name: &str, args: &Value, role: &str) -> String {
+    async fn handle_tool(&self, name: &str, args: &Value, role: &str) -> ToolHandling {
         if name == "write_file" {
-            let content = args.get("content").and_then(|v| v.as_str()).unwrap_or("");
-            let raw_path = args.get("path").and_then(|v| v.as_str()).unwrap_or("");
-            match self.resolve_write_target(raw_path) {
-                Some((full, display)) => {
-                    if let Some(parent) = full.parent() {
-                        std::fs::create_dir_all(parent).ok();
+            let Some(content) = args.get("content").and_then(|value| value.as_str()) else {
+                return ToolHandling::error("write_file requires a string content field");
+            };
+            let Some(raw_path) = args.get("path").and_then(|value| value.as_str()) else {
+                return ToolHandling::error("write_file requires a string path field");
+            };
+            if contains_secret(content, &self.config.redactions()) {
+                return ToolHandling::error("Refusing to persist the configured API key");
+            }
+            match self
+                .file_writer()
+                .and_then(|writer| writer.write(raw_path, content))
+            {
+                Ok(outcome) => {
+                    ui::print_file_written(role, &outcome.display);
+                    ToolHandling {
+                        message: format!("Written: {} ({} bytes)", outcome.display, content.len()),
+                        written_file: Some(outcome.display),
                     }
-                    std::fs::write(&full, content).ok();
-                    ui::print_file_written(role, &display);
-                    format!("Written: {display} ({} bytes)", content.len())
                 }
-                None => {
-                    format!("Invalid path: {raw_path}. Must stay inside the project code root.")
-                }
+                Err(error) => ToolHandling::error(&format!(
+                    "Invalid write: {error}. Must stay inside the project code root."
+                )),
             }
         } else if name == "ask_user" {
             let question = args.get("question").and_then(|v| v.as_str()).unwrap_or("");
@@ -300,57 +309,42 @@ impl AgentRunner {
                         .collect()
                 })
                 .unwrap_or_default();
-            ui::print_deepthink_question(role, question);
-            if options.is_empty() {
+            ui::print_deepthink_question(role, &self.config.redact(question));
+            let message = if options.is_empty() {
                 ui::prompt_user_answer()
             } else {
                 ui::prompt_user_select(&options)
+            };
+            ToolHandling {
+                message,
+                written_file: None,
             }
         } else {
-            format!("Unknown tool: {name}")
+            ToolHandling::error(&format!("Unknown tool: {name}"))
         }
+    }
+
+    fn file_writer(&self) -> Result<SafeFileWriter, String> {
+        let code_base = match &self.code_root {
+            Some(root) => root.clone(),
+            None => self.workspace.join("code"),
+        };
+        SafeFileWriter::new(&code_base)
     }
 
     pub fn resolve_write_target(&self, raw: &str) -> Option<(PathBuf, String)> {
-        let code_base = match &self.code_root {
-            Some(cr) => cr.clone(),
-            None => self.workspace.join("code"),
-        };
-
-        let mut rel = raw.replace('\\', "/").trim().to_string();
-        if let Some(s) = rel.strip_prefix("./") {
-            rel = s.to_string();
-        }
-        if let Some(s) = rel.strip_prefix("workspace/") {
-            rel = s.to_string();
-        }
-
-        let mut base = code_base;
-        if rel.starts_with("artifacts/") {
-            base = artifact_root(&self.team_root());
-            rel = rel["artifacts/".len()..].to_string();
-        } else if rel.starts_with("code/") {
-            rel = rel["code/".len()..].to_string();
-        }
-
-        if rel.is_empty() || rel.starts_with('/') {
-            return None;
-        }
-
-        let base_resolved = normalize_path(&base);
-        let full = normalize_path(&base_resolved.join(&rel));
-        if full != base_resolved && !full.starts_with(&base_resolved) {
-            return None;
-        }
-        let display = full
-            .strip_prefix(&base_resolved)
-            .map(|p| p.to_string_lossy().replace('\\', "/"))
-            .unwrap_or_else(|_| rel.clone());
-        Some((full, display))
+        self.file_writer().ok()?.resolve(raw).ok()
     }
 
-    fn write_reflection(&self, role: &str, task_id: &str, task: &Task, result_text: &str) {
-        let summary: String = result_text.chars().take(150).collect();
+    fn write_reflection(
+        &self,
+        role: &str,
+        task_id: &str,
+        task: &Task,
+        result_text: &str,
+    ) -> Result<(), String> {
+        let redacted = self.config.redact(result_text);
+        let summary: String = redacted.chars().take(150).collect();
         let reflection = serde_json::json!({
             "task_id": task_id,
             "role": role,
@@ -366,9 +360,31 @@ impl AgentRunner {
             .join("memory_center")
             .join("archive")
             .join(date_str.to_string());
-        std::fs::create_dir_all(&archive_dir).ok();
+        std::fs::create_dir_all(&archive_dir)
+            .map_err(|error| format!("Cannot create reflection directory: {error}"))?;
+        std::fs::set_permissions(
+            &archive_dir,
+            std::os::unix::fs::PermissionsExt::from_mode(0o700),
+        )
+        .map_err(|error| format!("Cannot protect reflection directory: {error}"))?;
         let file = archive_dir.join(format!("{task_id}_{role}_reflection.json"));
-        std::fs::write(file, serde_json::to_string_pretty(&reflection).unwrap()).ok();
+        let content = serde_json::to_vec_pretty(&reflection)
+            .map_err(|error| format!("Cannot serialize reflection: {error}"))?;
+        atomic_write_private(&file, &content)
+    }
+}
+
+struct ToolHandling {
+    message: String,
+    written_file: Option<String>,
+}
+
+impl ToolHandling {
+    fn error(message: &str) -> Self {
+        Self {
+            message: format!("ERROR: {message}"),
+            written_file: None,
+        }
     }
 }
 

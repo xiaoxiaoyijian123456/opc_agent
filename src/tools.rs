@@ -28,12 +28,13 @@ pub fn tool_defs() -> Vec<ToolDef> {
         },
         ToolDef {
             name: "run_bash".into(),
-            description: "Run a shell command. Executes automatically without confirmation; always include a description.".into(),
+            description: "Run a shell command after explicit per-command user approval. Always include a description. MYOPC_API_KEY is not inherited.".into(),
             parameters: json!({
                 "type": "object",
                 "properties": {
                     "command": { "type": "string", "description": "Shell command to run" },
-                    "description": { "type": "string", "description": "Brief explanation of what this command does" }
+                    "description": { "type": "string", "description": "Brief explanation of what this command does" },
+                    "timeout_seconds": { "type": "integer", "minimum": 1, "maximum": 600, "description": "Optional timeout, default 120 seconds" }
                 },
                 "required": ["command"]
             }),

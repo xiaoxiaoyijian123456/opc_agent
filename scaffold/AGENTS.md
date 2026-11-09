@@ -238,8 +238,8 @@ MYOPC_Team/
 
 ### 5.1 Skill 插件系统
 
-在 `skills/` 下创建目录，包含 `manifest.json` + `run.sh`，模型自动发现并调用。
-从 GitHub 安装: `/skill install <repo_url>`
+在 `skills/` 下创建目录，包含 `manifest.json` + `run.sh`，模型可以发现但不得自行安装、更新或删除。
+只有用户可通过 `/skill install <repo_url>` 主动安装；安装不自动执行入口或依赖。每次 Skill 调用和每条 Shell 命令均须由用户当次明确输入 `y`/`yes`，回车默认拒绝，不得提供会话级豁免。
 
 ### 5.2 记忆进化
 
