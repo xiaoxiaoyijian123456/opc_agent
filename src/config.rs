@@ -245,7 +245,7 @@ mod tests {
         std::fs::write(&file, r#"{"max_tokens":"many"}"#).unwrap();
 
         let error = load_json(&file).err().unwrap();
-        assert!(error.contains("max_tokens"));
+        assert!(error.contains("expected u32"), "error: {error}");
 
         std::fs::remove_dir_all(dir).ok();
     }

@@ -57,9 +57,7 @@ pub fn print_welcome(
             }
         ),
         String::new(),
-        "  /help for commands, /exit to quit"
-            .dimmed()
-            .to_string(),
+        "  /help for commands, /exit to quit".dimmed().to_string(),
     ];
     let boxed = draw_box(&lines, None);
     println!("{}", boxed.blue());

@@ -68,7 +68,7 @@ impl Bus {
             id: id.clone(),
             from: opts.from_role.clone().unwrap_or_else(|| "boss".into()),
             to: to_role.to_string(),
-            msg_type: opts.msg_type.clone().unwrap_or_else(String::new),
+            msg_type: opts.msg_type.clone().unwrap_or_default(),
             title: title.to_string(),
             content: content.to_string(),
             context: opts.context.unwrap_or(Value::Object(Default::default())),
@@ -198,4 +198,3 @@ pub struct DispatchOpts {
     pub msg_type: Option<String>,
     pub context: Option<Value>,
 }
-

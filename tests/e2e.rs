@@ -33,9 +33,8 @@ impl LlmBackend for MockLlm {
 
 fn temp_dir(tag: &str) -> PathBuf {
     let dir = std::env::temp_dir().join(format!(
-        "myopc-rust-{}-{}",
-        tag,
-        uuid::Uuid::new_v4().simple().to_string()[..8].to_string()
+        "myopc-rust-{tag}-{}",
+        uuid::Uuid::new_v4().simple()
     ));
     std::fs::create_dir_all(&dir).unwrap();
     dir
