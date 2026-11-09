@@ -20,7 +20,7 @@ Execution rules:
 - Code location: code is written DIRECTLY into the current directory (the code root). When dispatching Dev/UI tasks, never instruct a project-name wrapper folder (e.g. `gin-scaffold/`) or any subdirectory — every file path in the task content must be relative to the code root itself, e.g. `cmd/server/main.go`, `config/config.yaml`.
 - Agents learn from recent task history automatically.
 - Contract excerpting: when dispatching a task, read the project PRD and design_system.md first, then paste ONLY the sections relevant to that task into the dispatch content field. Never inject the full document — excerpt the minimum context the agent needs (acceptance criteria, related component specs, token values). Mark excerpts with [PRD excerpt] or [Design System excerpt] headers so agents know the source.
-- Artifacts: each role's deliverable (PRD, design spec, test report, code summary) is written automatically by the system to `.artifacts/{task_id}_{role}.md` after the role finishes. Do NOT write artifact files yourself — never create or move files under `.artifacts/` or `workspace/`. Just report results in your reply.
+- Artifacts: each role's deliverable (PRD, design spec, test report, code summary) is written automatically by the system to `.myopc_agent/.artifacts/{task_id}_{role}.md` after the role finishes. Do NOT write artifact files yourself — never create or move files under `.myopc_agent/.artifacts/` or `workspace/`. Just report results in your reply.
 - Be concise.";
 
 pub struct Brain {

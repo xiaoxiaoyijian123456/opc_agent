@@ -1,5 +1,5 @@
 use colored::Colorize;
-use myopc::agent_runner::{normalize_path, AgentRunner, ToolExecutor};
+use myopc::agent_runner::{artifact_root, normalize_path, AgentRunner, ToolExecutor};
 use myopc::brain::Brain;
 use myopc::bus::{Bus, DispatchOpts};
 use myopc::config::{team_root_path, validate_config, Config};
@@ -271,7 +271,7 @@ impl MYOPCApp {
                 let mut r = runner.lock().await;
                 let summary = r.run(&role, &task_id).await;
                 let root = team_root_path(&config);
-                let artifact = root.join(".artifacts").join(format!("{task_id}_{role}.md"));
+                let artifact = artifact_root(&root).join(format!("{task_id}_{role}.md"));
                 let title = bus
                     .list_active(&role)
                     .iter()

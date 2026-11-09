@@ -1,11 +1,13 @@
 use crate::bus::{Bus, Task};
 use crate::config::Config;
 use crate::identity::IdentityEngine;
+use crate::init::TEAM_DIR;
 use crate::llm::{LlmBackend, LlmResponse, Msg};
 use crate::tools::ToolDef;
 use crate::ui;
 use async_trait::async_trait;
 use serde_json::Value;
+use std::ffi::OsStr;
 use std::path::{Component, Path, PathBuf};
 use std::sync::Arc;
 
@@ -63,6 +65,20 @@ pub fn normalize_path(p: &Path) -> PathBuf {
     out
 }
 
+/// 角色产出物根目录：统一为 `<项目根>/.myopc_agent/.artifacts`。
+///
+/// team_root 可能有两种形态：
+///   - 已指向 `.myopc_agent` 目录（如配置 `team_root = ".myopc_agent"`）
+///   - 指向项目根目录（默认 `"."`）
+/// 两种情况下都保证所有角色的 `.artifacts` 产出物落在项目根下的 `.myopc_agent/.artifacts`。
+pub fn artifact_root(team_root: &Path) -> PathBuf {
+    if team_root.file_name().map(|n| n == OsStr::new(TEAM_DIR)).unwrap_or(false) {
+        team_root.join(".artifacts")
+    } else {
+        team_root.join(TEAM_DIR).join(".artifacts")
+    }
+}
+
 impl AgentRunner {
     pub fn new(
         config: Config,
@@ -91,7 +107,7 @@ impl AgentRunner {
         };
 
         let team_root = self.team_root();
-        let artifact_dir = team_root.join(".artifacts");
+        let artifact_dir = artifact_root(&team_root);
         let artifact_path = artifact_dir.join(format!("{task_id}_{role}.md"));
         let artifact_rel = artifact_path
             .strip_prefix(&std::env::current_dir().unwrap_or_default())
@@ -256,7 +272,7 @@ impl AgentRunner {
 
         let mut base = code_base;
         if rel.starts_with("artifacts/") {
-            base = self.team_root().join(".artifacts");
+            base = artifact_root(&self.team_root());
             rel = rel["artifacts/".len()..].to_string();
         } else if rel.starts_with("code/") {
             rel = rel["code/".len()..].to_string();
