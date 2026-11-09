@@ -165,9 +165,8 @@ class OPCApp {
           : path.join(ws, projName, 'code');
       }
 
-      const projectDir = path.join(ws, projName);
-      fs.ensureDirSync(projectDir);
-      fs.ensureDirSync(path.join(projectDir, 'artifacts'));
+      const artifactsPath = path.join(root, '.artifacts', projName);
+      fs.ensureDirSync(artifactsPath);
       fs.ensureDirSync(codeRoot);
 
       this.runner.projectId = projName;
@@ -177,19 +176,19 @@ class OPCApp {
         name: projName,
         title,
         code_path: codeRoot,
-        artifacts_path: path.join(projectDir, 'artifacts'),
+        artifacts_path: artifactsPath,
         created_at: new Date().toISOString(),
         keywords,
       });
 
       console.log(`  ${chalk.green('📁')} Project ${chalk.bold(projName)} created`);
-      console.log(`      Artifacts: ${path.join(projectDir, 'artifacts')}`);
+      console.log(`      Artifacts: ${artifactsPath}`);
       console.log(`      Code:      ${codeRoot}`);
       if (parent) console.log(`      Sibling of: ${parent}`);
 
       return JSON.stringify({
         project: projName,
-        artifacts_path: path.join(projectDir, 'artifacts'),
+        artifacts_path: artifactsPath,
         code_path: codeRoot,
       });
     }
@@ -225,8 +224,8 @@ class OPCApp {
         const root = teamRootPath(this.config);
         const projId = this.runner.projectId;
         const artifactPath = projId
-          ? path.join(root, 'workspace', projId, 'artifacts', `${taskId}_${role}.md`)
-          : path.join(root, 'workspace', 'artifacts', `${taskId}_${role}.md`);
+          ? path.join(root, '.artifacts', projId, `${taskId}_${role}.md`)
+          : path.join(root, '.artifacts', `${taskId}_${role}.md`);
         const taskInfo = this.bus.listActive(role);
         const title = taskInfo.find(t => t.id === taskId)?.title ?? taskId;
         return { role, taskId, title, summary, artifact: artifactPath };

@@ -55,7 +55,7 @@ OPC 是一个运行在终端里的 **AI 多智能体协作框架**。你只需�
                                          │ dispatch
                                          ▼
                ┌─────────────────────────────────────────────────┐
-               │            📬 File-System Message Bus            │
+               │   📬 Bus  ·  .opc_agent/communication/           │
                │                                                  │
                │   inbox/ (待处理) → active/ (执行中) → archive/   │
                └──┬──────────┬──────────┬──────────┬──────────┬──┘
@@ -71,7 +71,7 @@ OPC 是一个运行在终端里的 **AI 多智能体协作框架**。你只需�
                  │          │          │          │          │
                  ▼          ▼          ▼          ▼          ▼
             ┌─────────────────────────────────────────────────────┐
-            │              📁 workspace/artifacts/                 │
+            │      📁 .opc_agent/.artifacts/                       │
             │                                                     │
             │   {id}_pm.md    PRD 需求文档                         │
             │   {id}_dev.md   技术方案 + 代码文件                    │
@@ -80,6 +80,8 @@ OPC 是一个运行在终端里的 **AI 多智能体协作框架**。你只需�
             │   {id}_admin.md  项目总结                             │
             └─────────────────────────────────────────────────────┘
 ```
+
+> 图中 `communication/`、`workspace/`、`staff/`、`memory_center/`、`skills/`、`.artifacts/` 等内部路径均位于项目根目录的 `.opc_agent/` 下。
 
 ### 核心设计
 
@@ -110,9 +112,22 @@ mkdir my-startup && cd my-startup
 opc init
 ```
 
+初始化后，项目根目录下只会多出一个隐藏目录 `.opc_agent/`，所有内部文件（团队协议、角色人设、消息总线、工作区、记忆库、配置）都收纳在里面：
+
+```
+my-startup/
+└── .opc_agent/          ← 所有 OPC 内部文件
+    ├── opc.json
+    ├── AGENTS.md
+    ├── staff/
+    ├── communication/
+    ├── workspace/
+    └── memory_center/
+```
+
 ### 配置 API Key
 
-编辑生成的 `opc.json`：
+编辑 `.opc_agent/opc.json`：
 
 ```json
 {
@@ -120,7 +135,7 @@ opc init
     "api_key": "sk-your-api-key",
     "base_url": "https://api.openai.com/v1",
     "default_model": "gpt-4o",
-    "team_root": ".",
+    "team_root": ".opc_agent",
     "max_tokens": 8192,
     "temperature": 0.7
 }
@@ -171,19 +186,19 @@ opc > 做一个网页贪吃蛇小游戏
     (2) 触屏滑动
     (3) 键盘 + 触屏都要  ← 你选了这个
 
-  ✅ PM 产出 PRD → workspace/artifacts/a1b2c3d4_pm.md
+  ✅ PM 产出 PRD → .opc_agent/.artifacts/a1b2c3d4_pm.md
 
 💻 Dev 开始执行任务 [b2c3d4e5]
   📝 写入 code/index.html
   📝 写入 code/game.js
   📝 写入 code/style.css
-  ✅ Dev 完成 → workspace/artifacts/b2c3d4e5_dev.md
+  ✅ Dev 完成 → .opc_agent/.artifacts/b2c3d4e5_dev.md
 
-🎨 UI 产出设计规范 → workspace/artifacts/c3d4e5f6_ui.md
-🧪 Tester 产出测试报告 → workspace/artifacts/d4e5f6g7_tester.md
-📊 Admin 产出项目总结 → workspace/artifacts/e5f6g7h8_admin.md
+🎨 UI 产出设计规范 → .opc_agent/.artifacts/c3d4e5f6_ui.md
+🧪 Tester 产出测试报告 → .opc_agent/.artifacts/d4e5f6g7_tester.md
+📊 Admin 产出项目总结 → .opc_agent/.artifacts/e5f6g7h8_admin.md
 
-✅ 所有任务完成，产出物在 workspace/ 目录下
+✅ 所有任务完成，产出物在 .opc_agent/.artifacts/ 目录下
 ```
 
 ---
@@ -264,41 +279,47 @@ Brain 在关键节点会暂停，等你确认：
 
 ## 项目结构
 
-`opc init` 后生成的目录：
+`opc init` 后生成的目录（全部收纳在项目根目录的 `.opc_agent/` 下）：
 
 ```
 my-startup/
-├── opc.json                          ← 配置文件
-├── AGENTS.md                         ← 团队协议（所有角色自动加载）
-├── boundary.md                       ← 安全红线
-│
-├── communication/
-│   ├── bus/{role}/inbox/             ← 待处理任务
-│   ├── bus/{role}/active/            ← 执行中任务
-│   └── handoff_protocols.md          ← 角色交接规范
-│
-├── workspace/
-│   ├── artifacts/                    ← 角色产出物（PRD、代码、设计、测试报告）
-│   └── code/                         ← Dev/UI 写出的代码文件
-│
-├── staff/
-│   ├── boss_decide/                  ← Boss 身份 + 干预开关
-│   ├── pm_office/                    ← PM 身份 + 规则
-│   ├── dev_forge/                    ← Dev 身份 + 前后端规范
-│   ├── ui_ux_studio/                 ← UI 身份 + 设计模板
-│   ├── tester/                       ← Tester 身份 + 测试规范
-│   └── admin_bp/                     ← Admin 身份 + 报告模板
-│
-├── knowledge_base/                   ← 静态知识库（设计规范、技术文档、公司调性）
-│
-├── memory_center/
-│   ├── archive/{date}/               ← 已完成任务归档
-│   ├── user.md                       ← Boss 偏好记录
-│   └── reflection.log                ← Agent 自省日志
-│
-└── skills/                           ← 插件目录
-    └── hello_world/                  ← 示例插件
+└── .opc_agent/
+    ├── opc.json                      ← 配置文件
+    ├── AGENTS.md                     ← 团队协议（所有角色自动加载）
+    ├── boundary.md                   ← 安全红线
+    │
+    ├── communication/
+    │   ├── bus/{role}/inbox/         ← 待处理任务
+    │   ├── bus/{role}/active/        ← 执行中任务
+    │   └── handoff_protocols.md      ← 角色交接规范
+    │
+    ├── .artifacts/                   ← 角色产出物（PRD、设计、测试报告）
+    │   └── {project}/                ← 多项目时按项目分目录
+    │
+    ├── workspace/
+    │   ├── {project}/code/           ← Dev/UI 写出的代码文件
+    │   └── project_registry.json     ← 项目注册表
+    │
+    ├── staff/
+    │   ├── boss_decide/              ← Boss 身份 + 干预开关
+    │   ├── pm_office/                ← PM 身份 + 规则
+    │   ├── dev_forge/                ← Dev 身份 + 前后端规范
+    │   ├── ui_ux_studio/             ← UI 身份 + 设计模板
+    │   ├── tester/                   ← Tester 身份 + 测试规范
+    │   └── admin_bp/                 ← Admin 身份 + 报告模板
+    │
+    ├── knowledge_base/               ← 静态知识库（设计规范、技术文档、公司调性）
+    │
+    ├── memory_center/
+    │   ├── archive/{date}/           ← 已完成任务归档
+    │   ├── user.md                   ← Boss 偏好记录
+    │   └── reflection.log            ← Agent 自省日志
+    │
+    └── skills/                       ← 插件目录
+        └── hello_world/              ← 示例插件
 ```
+
+> 多项目模式下，产出物写到 `.artifacts/{project}/`，代码写到 `workspace/{project}/code/`；也可通过 `create_project` 选择把代码输出到桌面等外部目录。
 
 ---
 
@@ -306,13 +327,15 @@ my-startup/
 
 ### opc.json
 
+位于 `.opc_agent/opc.json`：
+
 ```json
 {
     "provider": "openai",
     "api_key": "sk-your-api-key",
     "base_url": "https://api.openai.com/v1",
     "default_model": "gpt-4o",
-    "team_root": ".",
+    "team_root": ".opc_agent",
     "max_tokens": 8192,
     "temperature": 0.7
 }
@@ -324,7 +347,7 @@ my-startup/
 | `api_key` | API 密钥 | — |
 | `base_url` | API 端点（兼容 OpenAI 格式的服务都能用） | `https://api.openai.com/v1` |
 | `default_model` | 模型名称 | `gpt-4o` |
-| `team_root` | 团队根目录 | `.` |
+| `team_root` | 团队根目录（相对启动目录） | `.` |
 | `max_tokens` | 单次回复最大 token 数 | `8192` |
 | `temperature` | 生成温度 (0-2) | `0.7` |
 
@@ -335,12 +358,12 @@ export OPC_API_KEY="sk-your-api-key"
 export OPC_PROVIDER="openai"
 export OPC_MODEL="gpt-4o"
 export OPC_BASE_URL="https://api.openai.com/v1"
-export OPC_TEAM_ROOT="."
+export OPC_TEAM_ROOT=".opc_agent"
 export OPC_MAX_TOKENS="8192"
 export OPC_TEMPERATURE="0.7"
 ```
 
-优先级：**环境变量** > 当前目录 `opc.json` > `~/.opc/opc.json`
+优先级：**环境变量** > 当前目录 `opc.json` > `.opc_agent/opc.json` > `~/.opc/opc.json`
 
 ### 使用其他 LLM
 

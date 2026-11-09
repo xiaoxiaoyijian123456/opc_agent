@@ -296,7 +296,7 @@ async function main() {
   }
 
   // Check artifact
-  const artifactDir = path.join(workspace, 'artifacts');
+  const artifactDir = path.join(DEMO_DIR, '.artifacts');
   const artifactFile = path.join(artifactDir, `${task.id}_pm.md`);
   const hasArtifact = fs.existsSync(artifactFile);
   console.log(`\n  产出物: ${hasArtifact ? chalk.green('✅') : chalk.red('❌')} ${hasArtifact ? artifactFile : 'not found'}`);

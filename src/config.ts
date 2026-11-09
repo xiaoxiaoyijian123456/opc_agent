@@ -64,10 +64,11 @@ function envOverrides(): Partial<Config> {
 
 export function loadConfig(): Config {
   const globalCfg = loadJson(path.join(process.env.HOME || '~', '.opc', 'opc.json'));
+  const hiddenCfg = loadJson(path.join(process.cwd(), '.opc_agent', 'opc.json'));
   const localCfg = loadJson(path.join(process.cwd(), 'opc.json'));
   const env = envOverrides();
 
-  return { ...DEFAULTS, ...globalCfg, ...localCfg, ...env };
+  return { ...DEFAULTS, ...globalCfg, ...hiddenCfg, ...localCfg, ...env };
 }
 
 export function teamRootPath(config: Config): string {

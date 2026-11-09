@@ -63,6 +63,7 @@ async function setup() {
     fs.ensureDirSync(path.join(TEST_DIR, 'communication', 'bus', role, 'active'));
   }
   fs.ensureDirSync(path.join(TEST_DIR, 'workspace'));
+  fs.ensureDirSync(path.join(TEST_DIR, '.artifacts'));
   fs.ensureDirSync(path.join(TEST_DIR, 'memory_center', 'archive'));
   fs.ensureDirSync(path.join(TEST_DIR, 'memory_center', 'project_history'));
 
@@ -223,10 +224,10 @@ async function testTaskChain() {
 - [x] 重新开始功能`;
 
   // Write PM artifact
-  fs.ensureDirSync(path.join(workspace, 'artifacts'));
-  fs.writeFileSync(path.join(workspace, 'artifacts', `${pmTask.id}_pm.md`), prdContent);
+  fs.ensureDirSync(path.join(TEST_DIR, '.artifacts'));
+  fs.writeFileSync(path.join(TEST_DIR, '.artifacts', `${pmTask.id}_pm.md`), prdContent);
   bus.complete('pm', pmTask.id, 'PRD completed: 5 user stories, 5 acceptance criteria');
-  assertFileExists(path.join(workspace, 'artifacts', `${pmTask.id}_pm.md`), 'PM artifact written');
+  assertFileExists(path.join(TEST_DIR, '.artifacts', `${pmTask.id}_pm.md`), 'PM artifact written');
 
   // Step 2: Brain dispatches Dev task with PRD reference
   console.log('  Step 2: Brain dispatches Dev task');
@@ -368,13 +369,13 @@ button:hover { background: #c73e54; }`;
 - Restart button on game over`;
 
   const devArtifact = `${devResult}\n\n## Files Written\n- index.html\n- game.js\n- style.css`;
-  fs.writeFileSync(path.join(workspace, 'artifacts', `${devTask.id}_dev.md`), devArtifact);
+  fs.writeFileSync(path.join(TEST_DIR, '.artifacts', `${devTask.id}_dev.md`), devArtifact);
   bus.complete('dev', devTask.id, devResult.slice(0, 200));
 
   assertFileExists(path.join(codeDir, 'index.html'), 'Dev wrote index.html');
   assertFileExists(path.join(codeDir, 'game.js'), 'Dev wrote game.js');
   assertFileExists(path.join(codeDir, 'style.css'), 'Dev wrote style.css');
-  assertFileExists(path.join(workspace, 'artifacts', `${devTask.id}_dev.md`), 'Dev artifact written');
+  assertFileExists(path.join(TEST_DIR, '.artifacts', `${devTask.id}_dev.md`), 'Dev artifact written');
 
   // Step 3: Brain dispatches Tester
   console.log('  Step 3: Brain dispatches Tester task');
@@ -414,9 +415,9 @@ BUG-01: 缺少触屏滑动支持
 核心功能完整，建议补充触屏支持后上线。
 Verdict: CONDITIONAL PASS`;
 
-  fs.writeFileSync(path.join(workspace, 'artifacts', `${testTask.id}_tester.md`), testReport);
+  fs.writeFileSync(path.join(TEST_DIR, '.artifacts', `${testTask.id}_tester.md`), testReport);
   bus.complete('tester', testTask.id, testReport.slice(0, 200));
-  assertFileExists(path.join(workspace, 'artifacts', `${testTask.id}_tester.md`), 'Tester artifact written');
+  assertFileExists(path.join(TEST_DIR, '.artifacts', `${testTask.id}_tester.md`), 'Tester artifact written');
 
   // Step 4: Admin summary
   console.log('  Step 4: Brain dispatches Admin task');
@@ -449,9 +450,9 @@ Verdict: CONDITIONAL PASS`;
 - Dev 补充 touch 事件支持
 - Tester 回归测试 TC-05`;
 
-  fs.writeFileSync(path.join(workspace, 'artifacts', `${adminTask.id}_admin.md`), adminReport);
+  fs.writeFileSync(path.join(TEST_DIR, '.artifacts', `${adminTask.id}_admin.md`), adminReport);
   bus.complete('admin', adminTask.id, adminReport.slice(0, 200));
-  assertFileExists(path.join(workspace, 'artifacts', `${adminTask.id}_admin.md`), 'Admin artifact written');
+  assertFileExists(path.join(TEST_DIR, '.artifacts', `${adminTask.id}_admin.md`), 'Admin artifact written');
 
   // Verify all tasks archived
   console.log('\n  Verifying archive:');
@@ -475,23 +476,21 @@ Verdict: CONDITIONAL PASS`;
 async function testArtifactContent(ids: { pmTask: any; devTask: any; testTask: any; adminTask: any; codeDir: string }) {
   console.log('\n📋 Phase 4: Artifact content validation');
 
-  const workspace = path.join(TEST_DIR, 'workspace');
-
   // PRD artifact
   assertFileContains(
-    path.join(workspace, 'artifacts', `${ids.pmTask.id}_pm.md`),
+    path.join(TEST_DIR, '.artifacts', `${ids.pmTask.id}_pm.md`),
     '用户故事',
     'PRD contains user stories section'
   );
   assertFileContains(
-    path.join(workspace, 'artifacts', `${ids.pmTask.id}_pm.md`),
+    path.join(TEST_DIR, '.artifacts', `${ids.pmTask.id}_pm.md`),
     '验收标准',
     'PRD contains acceptance criteria'
   );
 
   // Dev artifact
   assertFileContains(
-    path.join(workspace, 'artifacts', `${ids.devTask.id}_dev.md`),
+    path.join(TEST_DIR, '.artifacts', `${ids.devTask.id}_dev.md`),
     'Files Written',
     'Dev artifact lists written files'
   );
@@ -503,19 +502,19 @@ async function testArtifactContent(ids: { pmTask: any; devTask: any; testTask: a
 
   // Test report
   assertFileContains(
-    path.join(workspace, 'artifacts', `${ids.testTask.id}_tester.md`),
+    path.join(TEST_DIR, '.artifacts', `${ids.testTask.id}_tester.md`),
     'BUG-01',
     'Test report has bug report'
   );
   assertFileContains(
-    path.join(workspace, 'artifacts', `${ids.testTask.id}_tester.md`),
+    path.join(TEST_DIR, '.artifacts', `${ids.testTask.id}_tester.md`),
     'Verdict',
     'Test report has verdict'
   );
 
   // Admin report
   assertFileContains(
-    path.join(workspace, 'artifacts', `${ids.adminTask.id}_admin.md`),
+    path.join(TEST_DIR, '.artifacts', `${ids.adminTask.id}_admin.md`),
     '遗留问题',
     'Admin report has remaining issues'
   );
@@ -587,7 +586,7 @@ async function main() {
 
   // Print artifact tree
   console.log('\n📁 Artifact tree:');
-  const artDir = path.join(TEST_DIR, 'workspace', 'artifacts');
+  const artDir = path.join(TEST_DIR, '.artifacts');
   if (fs.existsSync(artDir)) {
     for (const f of fs.readdirSync(artDir).sort()) {
       const size = fs.statSync(path.join(artDir, f)).size;

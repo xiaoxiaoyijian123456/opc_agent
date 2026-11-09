@@ -448,7 +448,7 @@ async function main() {
   const identity = new IdentityEngine(DEMO_DIR);
   const workspace = path.join(DEMO_DIR, 'workspace');
   const codeDir = path.join(workspace, 'snake-game', 'code');
-  const artifactDir = path.join(workspace, 'artifacts');
+  const artifactDir = path.join(DEMO_DIR, '.artifacts');
   fs.ensureDirSync(artifactDir);
 
   // ── Welcome ──

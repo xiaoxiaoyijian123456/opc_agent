@@ -9,6 +9,7 @@ const RUNTIME_DIRS = [
   'communication/bus/{role}/inbox',
   'communication/bus/{role}/active',
   'workspace',
+  '.artifacts',
   'memory_center/archive',
   'memory_center/project_history',
 ];
@@ -18,8 +19,11 @@ function scaffoldRoot(): string {
   return path.join(__dirname, '..', 'scaffold');
 }
 
+export const TEAM_DIR = '.opc_agent';
+
 export function initProject(target: string) {
-  target = path.resolve(target);
+  const projectDir = path.resolve(target);
+  const targetRoot = path.join(projectDir, TEAM_DIR);
   const scaffold = scaffoldRoot();
 
   if (!fs.existsSync(scaffold)) {
@@ -33,7 +37,7 @@ export function initProject(target: string) {
   const allFiles = getAllFiles(scaffold).filter(f => !path.basename(f).startsWith('.'));
   for (const srcFile of allFiles.sort()) {
     const rel = path.relative(scaffold, srcFile);
-    const dst = path.join(target, rel);
+    const dst = path.join(targetRoot, rel);
     if (fs.existsSync(dst)) {
       skipped.push(rel);
       continue;
@@ -43,9 +47,9 @@ export function initProject(target: string) {
     created.push(rel);
   }
 
-  const opcJson = path.join(target, 'opc.json');
+  const opcJson = path.join(targetRoot, 'opc.json');
   if (!fs.existsSync(opcJson)) {
-    const example = path.join(target, 'opc.json.example');
+    const example = path.join(targetRoot, 'opc.json.example');
     if (fs.existsSync(example)) {
       fs.copyFileSync(example, opcJson);
       created.push('opc.json');
@@ -55,24 +59,24 @@ export function initProject(target: string) {
   for (const pattern of RUNTIME_DIRS) {
     if (pattern.includes('{role}')) {
       for (const role of ROLES) {
-        fs.ensureDirSync(path.join(target, pattern.replace('{role}', role)));
+        fs.ensureDirSync(path.join(targetRoot, pattern.replace('{role}', role)));
       }
     } else {
-      fs.ensureDirSync(path.join(target, pattern));
+      fs.ensureDirSync(path.join(targetRoot, pattern));
     }
   }
 
-  console.log(`\n${chalk.bold.green(`OPC initialized in ${target}`)}\n`);
+  console.log(`\n${chalk.bold.green(`OPC initialized in ${targetRoot}`)}\n`);
   if (created.length > 0) {
     for (const f of created) {
-      console.log(`  ${chalk.green('+')} ${f}`);
+      console.log(`  ${chalk.green('+')} ${path.join(TEAM_DIR, f)}`);
     }
   }
   if (skipped.length > 0) {
     console.log(`\n  ${chalk.dim(`${skipped.length} existing files unchanged`)}`);
   }
   console.log(`\n${chalk.bold('Next steps:')}`);
-  console.log(`  1. Edit ${chalk.cyan('opc.json')} — set your api_key`);
+  console.log(`  1. Edit ${chalk.cyan(path.join(TEAM_DIR, 'opc.json'))} — set your api_key`);
   console.log(`  2. Run ${chalk.cyan('opc')} to start\n`);
 }
 

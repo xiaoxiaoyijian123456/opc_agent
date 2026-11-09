@@ -128,24 +128,24 @@ Boss: "做一个用户登录功能"
   │  Q: 登录方式有哪些？
   │  Q: 登录态有效期？
   │  ...追问到信息充足
-  │  → 产出: PRD (workspace/artifacts/{id}_pm.md)
+  │  → 产出: PRD (.artifacts/{id}_pm.md)
   │
   ▼
 [Dev] implement — 基于 PRD 写技术方案和代码
   │  读取 PM 的 PRD
-  │  → 产出: 技术方案 + 代码 (workspace/artifacts/{id}_dev.md)
+  │  → 产出: 技术方案 + 代码 (.artifacts/{id}_dev.md)
   │
   ├──▶ [UI] design — 并行，基于 PRD 出设计
-  │      → 产出: 设计规范 (workspace/artifacts/{id}_ui.md)
+  │      → 产出: 设计规范 (.artifacts/{id}_ui.md)
   │
   ▼
 [Tester] test_plan — Dev 完成后
   │  读取 PRD + 技术方案
-  │  → 产出: 测试计划 + 用例 (workspace/artifacts/{id}_tester.md)
+  │  → 产出: 测试计划 + 用例 (.artifacts/{id}_tester.md)
   │
   ▼
 [Admin] report — 全部完成后
-  │  → 产出: 项目总结 (workspace/artifacts/{id}_admin.md)
+  │  → 产出: 项目总结 (.artifacts/{id}_admin.md)
   │
   ▼
 Boss 审阅所有产出
@@ -159,12 +159,12 @@ Boss: "登录页验证码倒计时有 BUG"
   ▼
 [Dev] bugfix
   │  定位问题 → 输出修复方案 + 代码补丁
-  │  → 产出: bugfix patch (workspace/artifacts/{id}_dev.md)
+  │  → 产出: bugfix patch (.artifacts/{id}_dev.md)
   │
   ▼
 [Tester] bug_verify
   │  验证修复是否生效 + 回归测试
-  │  → 产出: 验证报告 (workspace/artifacts/{id}_tester.md)
+  │  → 产出: 验证报告 (.artifacts/{id}_tester.md)
   │
   ├─ 通过 → 归档完成
   └─ 不通过 → 重新 dispatch to Dev (type: bugfix)
@@ -187,9 +187,12 @@ OPC_Team/
 │       ├── inbox/                     ← 待处理 (*.json)
 │       └── active/                    ← 执行中 (*.json)
 │
-├── workspace/                         ← 项目产出区
-│   └── artifacts/                     ← 所有角色的产出物
-│       └── {task_id}_{role}.md
+├── .artifacts/                        ← 所有角色的产出物
+│   ├── {task_id}_{role}.md
+│   └── {project_id}/                  ← 多项目时按项目分目录
+│
+├── workspace/                         ← 项目代码与注册表
+│   └── {project_id}/code/
 │
 ├── staff/                             ← 角色身份定义
 │   └── {role}/{role}_identity.md
@@ -224,7 +227,7 @@ OPC_Team/
 
 ### 4.3 产出物命名
 
-所有角色产出写入 `workspace/artifacts/`，命名规则: `{task_id}_{role}.md`
+所有角色产出写入 `.artifacts/`（按项目分目录时为 `.artifacts/{project}/`），命名规则: `{task_id}_{role}.md`
 
 ---
 

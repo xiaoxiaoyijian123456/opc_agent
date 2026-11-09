@@ -106,14 +106,12 @@ export class AgentRunner {
     const task = this.bus.claim(role, taskId);
     if (!task) return `No task ${taskId} in ${role} inbox`;
 
-    const projectDir = this.projectId
-      ? path.join(this.workspace, this.projectId)
-      : this.workspace;
-    const artifactDir = path.join(projectDir, 'artifacts');
+    const teamRoot = path.dirname(this.workspace);
+    const artifactDir = this.projectId
+      ? path.join(teamRoot, '.artifacts', this.projectId)
+      : path.join(teamRoot, '.artifacts');
     const artifactPath = path.join(artifactDir, `${taskId}_${role}.md`);
-    const artifactRel = this.projectId
-      ? `workspace/${this.projectId}/artifacts/${taskId}_${role}.md`
-      : `workspace/artifacts/${taskId}_${role}.md`;
+    const artifactRel = path.relative(process.cwd(), artifactPath).split(path.sep).join('/');
 
     const system = this.identity.buildSystemPrompt(role);
     const userMsg = [
@@ -180,7 +178,10 @@ export class AgentRunner {
 
     let base = codeBase;
     if (rel.startsWith('artifacts/')) {
-      base = path.join(projectDir, 'artifacts');
+      const teamRoot = path.dirname(this.workspace);
+      base = this.projectId
+        ? path.join(teamRoot, '.artifacts', this.projectId)
+        : path.join(teamRoot, '.artifacts');
       rel = rel.slice('artifacts/'.length);
     } else if (rel.startsWith('code/')) {
       rel = rel.slice('code/'.length);
